@@ -1,0 +1,10 @@
+[deps]
+Distributed = "8ba89e20-285c-5b6f-9357-94700520ee1b"
+InlineStrings = "842dd82b-1e85-43dc-bf29-5d0ee9dffc48"
+NCDatasets = "85f8d34a-cbdd-5861-8df4-14fed0d494ab"
+OhMyThreads = "67456a42-1dca-4109-a031-0a68de7e3ad5"
+SwirlLMCloudBench = "4f4bb049-d08d-4796-8bfd-29fb09dac0f0"
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[sources]
+SwirlLMCloudBench = {path = ".."}
