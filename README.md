@@ -114,7 +114,7 @@ csv = S.ensure_cloudbench_sounding_local!(sim)  # sounding only
 # After download, metadata + LocalCloudBenchMirrorOutput(root) (default):
 loaded = S.load_cloudbench_simulation(S.CloudBenchInstance(0, 1, :amip); download=true)
 loaded.metadata.parameters   # CloudBenchParameters
-loaded.metadata.sounding     # CloudBenchSounding (columns z, T, q_t, u, v, rho)
+loaded.metadata.sounding     # CloudBenchSounding — full bucket schema (`Simulation.CLOUDBENCH_SOUNDING_CSV_HEADER`); expand to `(z,time)` with `Simulation.cloudbench_sounding_zt_matrices`
 loaded.output.root           # local mirror root used for that tree
 
 # Same metadata from disk, but keep RemoteCloudBenchZarrOutput (HTTPS Zarr; no LocalCloudBenchMirrorOutput):

@@ -1,4 +1,4 @@
-import InlineStrings
+using InlineStrings: InlineStrings
 using ..Catalog: Catalog
 
 # --- Abstract hierarchy ---

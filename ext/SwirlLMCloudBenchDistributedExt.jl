@@ -10,8 +10,7 @@ e.g. `@everywhere using SwirlLMCloudBench`).
 module SwirlLMCloudBenchDistributedExt
 
 using Distributed: Distributed
-using SwirlLMCloudBench
-using SwirlLMCloudBench: Simulation as S
+using SwirlLMCloudBench: Simulation as S, SwirlLMCloudBench
 
 _as_instance(x::S.CloudBenchInstance) = x
 _as_instance(s::S.CloudBenchSimulation) = S.cloudbench_instance(s)

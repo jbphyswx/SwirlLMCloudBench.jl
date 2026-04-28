@@ -1,0 +1,26 @@
+# Isolated environment for SwirlLMCloudBenchClimaAtmosExt checks.
+#
+# ClimaAtmos must be a checkout whose source defines `ProvidedColumnTVForcing` (see `src/solver/types.jl` in this repo).
+# A pinned General-registry release may omit that binding if it predates landing in a numbered tag — `path` this tree when testing.
+# Default layout: sibling repos under `CliMA/` → `../../../../../ClimaAtmos.jl`.
+# If your clone differs, edit `[sources]` below or run `pkg> dev /abs/path/to/ClimaAtmos.jl`.
+#
+#   cd SwirlLMCloudBench.jl
+#   julia --project=test/environments/clima -e 'import Pkg; Pkg.instantiate()'
+#   julia --project=test/environments/clima test/clima_ext_flat_tvi_consistency.jl
+
+[deps]
+ClimaAtmos = "b2c96348-7fb7-4fe0-8da9-78d88439e717"
+ClimaCore = "d414da3d-4745-48bb-8d80-42e94e092884"
+ClimaUtilities = "b3f4f4ca-9299-4f7f-bd9b-81e1242a7513"
+SwirlLMCloudBench = "4f4bb049-d08d-4796-8bfd-29fb09dac0f0"
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[sources]
+ClimaAtmos = {path = "../../../../../ClimaAtmos.jl"}
+SwirlLMCloudBench = {path = "../../.."}
+
+[compat]
+ClimaCore = "0.14.50"
+ClimaUtilities = "0.1.27"
+julia = "1.12"

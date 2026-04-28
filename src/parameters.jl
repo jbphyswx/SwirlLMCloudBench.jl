@@ -1,4 +1,4 @@
-import InlineStrings
+using InlineStrings: InlineStrings
 using JSON: JSON
 
 """

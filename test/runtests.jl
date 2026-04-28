@@ -1,7 +1,12 @@
 using Test
-import InlineStrings
-using SwirlLMCloudBench
-using SwirlLMCloudBench: Simulation as S
+using InlineStrings: InlineStrings
+using SwirlLMCloudBench:
+    Artifacts,
+    Catalog,
+    Config,
+    Paths,
+    Simulation as S,
+    SwirlLMCloudBench
 
 @testset "Catalog" begin
     @test length(Catalog.CLOUDBENCH_CASE_INDICES) == 500
@@ -155,9 +160,9 @@ end
         mkpath(d)
         write(S.parameters_path(inst, root), js)
         open(joinpath(d, "sounding.csv"), "w") do io
-            println(io, "z,temperature,q_t,u,v,rho")
-            println(io, "0.0,288.0,0.01,0.0,0.0,1.2")
-            println(io, "100.0,280.0,0.008,1.0,0.5,1.0")
+            println(io, S.CLOUDBENCH_SOUNDING_CSV_HEADER)
+            println(io, "0,288,288,0.01,0.0,0.0,0.0,0.0,0.0,288,101325.0,1.2,0.0")
+            println(io, "100,280,280,0.008,1.0,0.5,0.0,0.0,0.0,280,100000.0,1.0,0.0")
         end
         r = S.load_cloudbench_simulation(inst; root = root, download = false, local_mirror = false)
         @test r isa S.CloudBenchSimulationRemoteLoaded
@@ -198,30 +203,54 @@ end
 
 @testset "CloudBenchSounding and write_sounding_netcdf!" begin
     using NCDatasets
+    @test S.CLOUDBENCH_SOUNDING_CSV_HEADER ==
+          "z,theta_li,temperature,q_t,u,v,w,T_adv_src,q_t_adv_src,T,p,rho,cld_frac"
     mktempdir() do dir
         csv = joinpath(dir, "sounding.csv")
         open(csv, "w") do io
-            println(io, "z,temperature,q_t,u,v,rho")
-            println(io, "0.0,288.0,0.01,0.0,0.0,1.2")
-            println(io, "100.0,280.0,0.008,1.0,0.5,1.0")
+            println(io, S.CLOUDBENCH_SOUNDING_CSV_HEADER)
+            println(io, "0,288,288,0.01,0.0,0.0,0.0,0.0,0.0,288,101325.0,1.2,0.0")
+            println(io, "100,280,280,0.008,1.0,0.5,0.0,0.0,0.0,280,100000.0,1.0,0.0")
         end
         s = S.CloudBenchSounding(csv)
         @test s isa S.CloudBenchSounding{Float32,Vector{Float32}}
         @test length(s.z) == 2
+        @test s.T == s.T_column
         @test_throws DimensionMismatch S.CloudBenchSounding{Float32,Vector{Float32}}(
             [0.0f0],
+            [1.0f0],
             [1.0f0],
             [0.01f0],
             [0.0f0],
             [0.0f0],
-            [1.0f0, 1.0f0],
+            [0.0f0],
+            [0.0f0],
+            [0.0f0],
+            [1.0f0],
+            [100_000.0f0],
+            [1.0f0, 2.0f0],
+            [0.0f0],
         )
         nc = joinpath(dir, "out.nc")
         S.write_sounding_netcdf!(nc, s, "site_test")
         @test isfile(nc)
         NCDatasets.NCDataset(nc) do ds
             g = ds.group["site_test"]
-            for name in ("z", "temperature", "q_t", "u", "v", "rho")
+            for name in (
+                "z",
+                "theta_li",
+                "temperature",
+                "q_t",
+                "u",
+                "v",
+                "w",
+                "T_adv_src",
+                "q_t_adv_src",
+                "T",
+                "p",
+                "rho",
+                "cld_frac",
+            )
                 @test haskey(g, name)
                 @test size(g[name]) == (2,)
             end
@@ -229,6 +258,42 @@ end
         nc2 = joinpath(dir, "out2.nc")
         S.write_sounding_netcdf!(nc2, csv, "site2")
         @test isfile(nc2)
+    end
+end
+
+@testset "CloudBenchSounding parse errors and cloudbench_sounding_zt_matrices" begin
+    mktempdir() do dir
+        csv = joinpath(dir, "rich_sounding.csv")
+        open(csv, "w") do io
+            println(io, S.CLOUDBENCH_SOUNDING_CSV_HEADER)
+            println(io, "0,300,280,0.01,1,2,0.1,1e-5,1e-8,280,1e5,1.2,0.3")
+            println(io, "100,290,270,0.008,1,2,-0.05,2e-5,2e-8,270,9e4,1.0,0.2")
+        end
+        s = S.CloudBenchSounding(csv)
+        @test occursin("vertical level", sprint(show, s))
+        nt = S.read_cloudbench_sounding_columns(csv, Float32)
+        @test nt.T_column == s.T_column
+        m = S.cloudbench_sounding_zt_matrices(s, 4)
+        @test m.w[1, 1] == 0.1f0 && m.w[1, 3] == 0.1f0
+        @test m.temperature_horizontal_advective_tendency[1, 1] ≈ 1.0f-5 + 0.1f0 * (-0.1f0)
+        @test m.temperature_horizontal_advective_tendency[2, 2] ≈ 2.0f-5 + (-0.05f0) * (-0.1f0)
+        @test m.q_t_horizontal_advective_tendency[1, 1] ≈ 1.0f-8 + 0.1f0 * (-2.0f-5)
+        @test m.q_t_horizontal_advective_tendency[2, 2] ≈ 2.0f-8 + (-0.05f0) * (-2.0f-5)
+        Tadv = S._profile_replicated(s.T_adv_src, length(s.z), 4)
+        Qadv = S._profile_replicated(s.q_t_adv_src, length(s.z), 4)
+        @test m.temperature_horizontal_advective_tendency ≈ Tadv .+ m.temperature_vertical_advection
+        @test m.q_t_horizontal_advective_tendency ≈ Qadv .+ m.q_t_vertical_advection
+        g = 9.80665f0
+        @test m.vertical_pressure_velocity[1, 1] ≈ -1.2f0 * g * 0.1f0
+    end
+    mktempdir() do dir
+        bad = joinpath(dir, "bad.csv")
+        open(bad, "w") do io
+            println(io, "z,temperature,q_t,u,v,rho")
+            println(io, "0,280,0.01,1,2,1.2")
+            println(io, "100,270,0.008,1,2,1.0")
+        end
+        @test_throws ErrorException S.CloudBenchSounding(bad)
     end
 end
 
@@ -265,9 +330,14 @@ end
     @test length(s) < 80
     csv = joinpath(mktempdir(), "s.csv")
     open(csv, "w") do io
-        println(io, "z,temperature,q_t,u,v,rho")
+        println(io, S.CLOUDBENCH_SOUNDING_CSV_HEADER)
         for i in 1:3
-            println(io, "$i.0,280.0,0.01,0.0,0.0,1.0")
+            zv = Float32(i)
+            tv = 280f0 + zv
+            println(
+                io,
+                "$(zv),$(tv),$(tv),0.01,0.0,0.0,0.0,0.0,0.0,$(tv),101325.0,1.0,0.0",
+            )
         end
     end
     snd = S.CloudBenchSounding(csv)

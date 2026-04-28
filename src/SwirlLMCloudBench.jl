@@ -75,6 +75,10 @@ function write_clima_gcm_forcing_sounding_netcdf! end
 function prepare_climaatmos_cloudbench_worktree! end
 function merge_clima_cloudbench_overlay! end
 function merge_clima_gcmdriven_forcing_keys! end
+function write_clima_tv_flat_forcing_netcdf_from_sounding! end
+function build_provided_column_tv_forcing_from_nc end
+function build_provided_column_tv_forcing_from_cloudbench_sounding end
+function cloudbench_provided_column_tv_forcing end
 function cloudbench_tmap end
 function cloudbench_pmap_download_raw! end
 
