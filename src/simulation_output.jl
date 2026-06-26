@@ -23,10 +23,12 @@ include(joinpath(@__DIR__, "sounding.jl"))
 include(joinpath(@__DIR__, "simulation.jl"))
 include(joinpath(@__DIR__, "urls.jl"))
 include(joinpath(@__DIR__, "raw_paths.jl"))
+include(joinpath(@__DIR__, "download_util.jl"))
 include(joinpath(@__DIR__, "sounding_download.jl"))
 include(joinpath(@__DIR__, "zarr_dataset.jl"))
 include(joinpath(@__DIR__, "sounding_netcdf.jl"))
 include(joinpath(@__DIR__, "selection.jl"))
 include(joinpath(@__DIR__, "raw_download.jl"))
+include(joinpath(@__DIR__, "bundled.jl"))
 
 end

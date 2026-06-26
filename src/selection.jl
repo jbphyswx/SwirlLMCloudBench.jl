@@ -42,18 +42,6 @@ end
 Base.eltype(::Type{CloudBenchSelection{S,M,E}}) where {S,M,E} = CloudBenchSimulationRemote
 Base.IteratorSize(::Type{<:CloudBenchSelection}) = Base.HasLength()
 
-function Base.iterate(sel::CloudBenchSelection)
-    p = Iterators.product(sel.site_ids, sel.months, sel.experiments)
-    it = iterate(p)
-    it === nothing && return nothing
-    (si, mo, ex), s = it
-    return CloudBenchSimulation(Int(si), Int(mo), ex), (p, s)
-end
-
-function Base.iterate(sel::CloudBenchSelection, state)
-    p, s = state
-    it = iterate(p, s)
-    it === nothing && return nothing
-    (si, mo, ex), s2 = it
-    return CloudBenchSimulation(Int(si), Int(mo), ex), (p, s2)
-end
+# Single source of truth for ordering: delegate iteration to `each_simulation` rather than re-implementing the
+# Cartesian product, so the two can never drift out of sync.
+Base.iterate(sel::CloudBenchSelection, state...) = iterate(each_simulation(sel), state...)

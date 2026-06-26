@@ -2,6 +2,35 @@ using Zarr: Zarr
 using ..Catalog: Catalog
 
 """
+    _zopen_consolidated_or_plain(path; verbose=nothing)
+
+Open a Zarr store, preferring consolidated metadata (one metadata fetch) and falling back to a plain open when
+consolidated metadata is absent. Unlike a bare `try/catch`, the first error is logged (opt-in) and, if **both**
+attempts fail, the thrown error surfaces *both* causes — so a real network/permission/404 failure is not masked
+by the fallback path.
+"""
+function _zopen_consolidated_or_plain(path::AbstractString; verbose::Union{Nothing,Bool} = nothing)
+    try
+        return Zarr.zopen(path; consolidated = true)
+    catch consolidated_err
+        _Pkg.cloudbench_info(
+            "consolidated Zarr metadata unavailable; retrying without it";
+            verbose,
+            path,
+            consolidated_err,
+        )
+        try
+            return Zarr.zopen(path)
+        catch plain_err
+            error(
+                "failed to open Zarr store at $(path): $(plain_err) " *
+                "(consolidated-metadata attempt also failed: $(consolidated_err))",
+            )
+        end
+    end
+end
+
+"""
     open_zarr(sim)
     open_zarr(site_id, month, experiment=:amip)
 
@@ -22,11 +51,7 @@ function open_zarr(
 )
     path = cloudbench_zarr_url(site_id, month, experiment)
     _Pkg.cloudbench_info("Opening CloudBench Zarr (lazy)"; verbose, path)
-    try
-        return Zarr.zopen(path; consolidated = true)
-    catch
-        return Zarr.zopen(path)
-    end
+    return _zopen_consolidated_or_plain(path; verbose)
 end
 
 open_zarr(inst::CloudBenchInstance; verbose::Union{Nothing,Bool} = nothing) =
@@ -55,13 +80,9 @@ function open_zarr_local(
     verbose::Union{Nothing,Bool} = nothing,
 )
     path = zarr_local_path(inst, root)
-    isdir(path) || error("local Zarr store not found at $(path)")
+    isdir(path) || throw(ArgumentError("local Zarr store not found at $(path)"))
     _Pkg.cloudbench_info("Opening local CloudBench Zarr (lazy)"; verbose, path)
-    try
-        return Zarr.zopen(path; consolidated = true)
-    catch
-        return Zarr.zopen(path)
-    end
+    return _zopen_consolidated_or_plain(path; verbose)
 end
 
 open_zarr_local(sim::CloudBenchSimulation, root::AbstractString; verbose::Union{Nothing,Bool} = nothing) =

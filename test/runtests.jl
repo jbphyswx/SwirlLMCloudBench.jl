@@ -1,12 +1,15 @@
-using Test
+using Test: @test, @testset, @test_throws
 using InlineStrings: InlineStrings
 using SwirlLMCloudBench:
-    Artifacts,
+    CaseDirs,
     Catalog,
     Config,
     Paths,
     Simulation as S,
     SwirlLMCloudBench
+
+# Run Aqua first, on the pristine package (before the extension-triggering `using`s below load weakdeps).
+include("test_aqua.jl")
 
 @testset "Catalog" begin
     @test length(Catalog.CLOUDBENCH_CASE_INDICES) == 500
@@ -39,10 +42,6 @@ end
     @test occursin("data", dr)
     cr = Paths.default_cache_root()
     @test occursin("scratch", cr)
-    p = Paths.case_artifact_dir("/tmp/cloudbench", :amip, 3; month=4)
-    @test p == joinpath("/tmp/cloudbench", "amip", "3", "month_4")
-    p2 = Paths.case_artifact_dir("/tmp/cloudbench", :amip, 3)
-    @test p2 == joinpath("/tmp/cloudbench", "amip", "3")
 end
 
 @testset "Config" begin
@@ -70,15 +69,19 @@ end
     end
 end
 
-@testset "Artifacts.resolved_case_dir" begin
+@testset "CaseDirs.resolved_case_dir (canonical bucket layout)" begin
     mktempdir() do d
         withenv("SWIRL_LM_CLOUDBENCH_DATA_ROOT" => d) do
-            p = Artifacts.resolved_case_dir(:amip, 10; month=7)
-            @test p == joinpath(d, "amip", "10", "month_7")
+            p = CaseDirs.resolved_case_dir(10, 7, :amip)
+            @test p == joinpath(d, "10", "7", "amip")
+            # consistent with the download / bucket layout
+            @test p == S.local_simulation_dir(d, S.CloudBenchInstance(10, 7, :amip))
         end
+        @test CaseDirs.resolved_case_dir(0, 4, :amip_p4k; root = d) == joinpath(d, "0", "4", "amip-p4k")
     end
-    @test_throws ArgumentError Artifacts.resolved_case_dir(:amip, 500)
-    @test_throws ArgumentError Artifacts.resolved_case_dir(:amip, 0; month=2)
+    @test_throws ArgumentError CaseDirs.resolved_case_dir(500, 7, :amip)
+    @test_throws ArgumentError CaseDirs.resolved_case_dir(0, 2, :amip)
+    @test_throws ArgumentError CaseDirs.resolved_case_dir(0, 7, :nope)
 end
 
 @testset "CloudBenchSimulation and Simulation URLs" begin
@@ -119,9 +122,14 @@ end
     "sounding_path":"/x/sounding.csv","config_path":"/x/config.pbtxt"}
     """
     cp = S.parse_cloudbench_parameters(js)
-    @test cp isa S.CloudBenchParameters{Float32,InlineStrings.String127}
+    @test cp isa S.CloudBenchParameters{Float32,String}
+    @test cp isa S.CloudBenchParametersDefault
     @test cp.experiment == "amip" && cp.month == 1
     @test cp.latitude ≈ 16.5f0 && cp.longitude ≈ -141.875f0
+    # opt-in isbits inline string storage still works (parametric)
+    cp_inline = S.parse_cloudbench_parameters(js; string_type = InlineStrings.String127)
+    @test cp_inline isa S.CloudBenchParametersInline
+    @test cp_inline.experiment == "amip"
     mktempdir() do dir
         p = joinpath(dir, "p.json")
         write(p, js)
@@ -134,12 +142,14 @@ end
     "sounding_path":"/x/sounding.csv","config_path":"/x/config.pbtxt","unexpected":1}
     """
     @test_throws ArgumentError S.parse_cloudbench_parameters(js_extra)
+    # strict=false ignores unknown keys (forward-compatible)
+    @test S.parse_cloudbench_parameters(js_extra; strict = false) isa S.CloudBenchParametersDefault
 end
 
 @testset "open_zarr_local missing store" begin
     sim = S.CloudBenchSimulation(0, 1, :amip)
     mktempdir() do root
-        @test_throws ErrorException S.open_zarr_local(sim, root)
+        @test_throws ArgumentError S.open_zarr_local(sim, root)
     end
 end
 
@@ -189,6 +199,16 @@ if get(ENV, "CLOUDBENCH_NETWORK_TEST", "") == "1"
             @test bundle.output.root == root
         end
     end
+
+    @testset "bundled soundings artifact (network)" begin
+        inst = S.CloudBenchInstance(0, 1, :amip)
+        d = S.bundled_soundings_dir()                       # downloads the ~10 MB artifact once
+        @test isdir(d)
+        @test isfile(S.bundled_sounding_path(inst))
+        @test isfile(S.bundled_parameters_path(inst))
+        snd = S.bundled_sounding(inst)
+        @test snd isa S.CloudBenchSounding && length(snd.z) >= 2
+    end
 end
 
 @testset "q_c split (Swirl-LM condensate_liquid_fraction)" begin
@@ -202,7 +222,7 @@ end
 end
 
 @testset "CloudBenchSounding and write_sounding_netcdf!" begin
-    using NCDatasets
+    using NCDatasets: NCDatasets
     @test S.CLOUDBENCH_SOUNDING_CSV_HEADER ==
           "z,theta_li,temperature,q_t,u,v,w,T_adv_src,q_t_adv_src,T,p,rho,cld_frac"
     mktempdir() do dir
@@ -297,6 +317,54 @@ end
     end
 end
 
+@testset "value semantics (==/hash)" begin
+    mktempdir() do dir
+        csv = joinpath(dir, "sounding.csv")
+        open(csv, "w") do io
+            println(io, S.CLOUDBENCH_SOUNDING_CSV_HEADER)
+            println(io, "0,288,288,0.01,0.0,0.0,0.0,0.0,0.0,288,101325.0,1.2,0.0")
+            println(io, "100,280,280,0.008,1.0,0.5,0.0,0.0,0.0,280,100000.0,1.0,0.0")
+        end
+        s1 = S.CloudBenchSounding(csv)
+        s2 = S.CloudBenchSounding(csv)   # independently parsed: equal content, distinct Vectors
+        @test s1 == s2                    # was broken before (fell back to === on Vector fields)
+        @test hash(s1) == hash(s2)
+        @test length(Set([s1, s2])) == 1
+        js = """{"experiment":"amip","month":1,"latitude":16.5,"longitude":-141.875,"sst":297.5,"p_sfc":101447.7,
+        "theta_li_sfc":296.36,"q_t_sfc":0.018,"zenith":0.89,"insolation":333.0,"irrad":532.0,
+        "sounding_path":"/x/sounding.csv","config_path":"/x/config.pbtxt"}"""
+        inst = S.CloudBenchInstance(0, 1, :amip)
+        d = S.local_simulation_dir(dir, inst)
+        mkpath(d)
+        write(S.parameters_path(inst, dir), js)
+        cp(csv, S.sounding_path(inst, dir))
+        a = S.load_cloudbench_simulation(inst; root = dir, download = false)
+        b = S.load_cloudbench_simulation(inst; root = dir, download = false)
+        @test a isa S.CloudBenchSimulationLoaded
+        @test a == b                      # full metadata chain incl. parsed sounding
+        @test hash(a) == hash(b)
+    end
+    i1 = S.CloudBenchInstance(3, 4, :amip_p4k)
+    i2 = S.CloudBenchInstance(3, 4, :amip_p4k)
+    @test i1 == i2 && hash(i1) == hash(i2)
+    @test haskey(Dict(i1 => :x), i2)
+end
+
+@testset "split_q_c arrays + promotion" begin
+    # mixed scalar types promote
+    ql, qi = S.split_q_c(0.1f0, 253.15)
+    @test ql + qi ≈ 0.1f0
+    # array form returns two arrays (the documented data.zarr use)
+    q_c = [0.1, 0.2, 0.0]
+    T = [253.15, 233.0, 300.0]
+    q_liq, q_ice = S.split_q_c(q_c, T)
+    @test q_liq isa AbstractVector && q_ice isa AbstractVector
+    @test q_liq .+ q_ice ≈ q_c
+    @test q_ice[2] ≈ 0.2          # all ice at 233 K
+    @test q_liq[3] ≈ 0.0          # all liquid at 300 K -> q_ice 0, but q_c is 0 here
+    @test_throws DimensionMismatch S.split_q_c([0.1, 0.2], [253.15])
+end
+
 @testset "CloudBenchSelection (lazy)" begin
     sel = S.CloudBenchSelection((0, 1), (1,), (:amip, :amip_p4k))
     @test length(sel) == 4
@@ -363,13 +431,13 @@ end
 end
 
 @testset "OhMyThreads extension" begin
-    using OhMyThreads
+    using OhMyThreads: OhMyThreads
     @test Base.get_extension(SwirlLMCloudBench, :SwirlLMCloudBenchOhMyThreadsExt) !== nothing
     @test SwirlLMCloudBench.cloudbench_tmap(x -> 2x, [1, 2, 3]) == [2, 4, 6]
 end
 
 @testset "Distributed extension" begin
-    using Distributed
+    using Distributed: Distributed
     @test Base.get_extension(SwirlLMCloudBench, :SwirlLMCloudBenchDistributedExt) !== nothing
     @test SwirlLMCloudBench.cloudbench_pmap_download_raw!(
         S.CloudBenchSimulation[],

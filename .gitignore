@@ -21,11 +21,10 @@ docs/build/
 docs/site/
 docs/src/config.md
 
-/Manifest*.toml
-*/Manifest*.toml  # docs, test
-.buildkite/PrecompileCI/Manifest*.toml
+# Resolved package manifests — never committed; pin versions via Project.toml [compat], not Manifests
+Manifest*.toml
 
-Artifacts.toml
+# (Artifacts.toml — the bundled-soundings binding — is committed, so it is NOT ignored)
 
 # ignore vscode and macos artifacts
 *.vscode
@@ -55,3 +54,5 @@ Artifacts.toml
 AGENTS.md
 MEMORY.md
 .agents
+# generated artifact tarballs (gen/build_sounding_artifact.jl)
+*.tar.gz

@@ -8,20 +8,22 @@ Parsed `parameters.json` from a CloudBench simulation directory (see upstream va
 [CloudBench README](https://github.com/google-research/swirl-lm/blob/main/swirl_lm/example/geo_flows/cloud_feedback/README.md)).
 
 Floating-point fields use scalar type `T` (default `Float32`). String fields (`experiment`, `sounding_path`, `config_path`)
-share type `S` (default `InlineStrings.String127` for `isbits` storage when `S` is an inline type).
+share type `S` (default `String`). For `isbits` storage pass an inline type, e.g. `string_type = InlineStrings.String127`
+(see [`CloudBenchParametersInline`](@ref)) — but note inline types throw if a path exceeds their capacity.
 
-`sounding_path` and `config_path` are **upstream absolute paths** inside Google’s layout, not your local mirror.
+`sounding_path` and `config_path` are **upstream absolute paths** inside Google’s layout, not your local mirror; these
+can be long, which is why `String` is the default.
 
-[`CloudBenchParameters`](@ref)(`d`) and [`read_cloudbench_parameters`](@ref) default to `T = Float32`, `S = InlineStrings.String127`.
-Use [`CloudBenchParameters{T,S}(d)`](@ref) or keyword `string_type = String` if a path can exceed the inline capacity.
+[`CloudBenchParameters`](@ref)(`d`) and [`read_cloudbench_parameters`](@ref) default to `T = Float32`, `S = String`.
 
-Unknown keys in the JSON object are an error (strict schema).
+Unknown keys in the JSON object raise `ArgumentError` by default (`strict=true`); pass `strict=false` to ignore them with a `@warn`.
 
 # Example
 
 ```julia
-CloudBenchParameters(dict)                    # Float32 + InlineStrings.String127
-CloudBenchParameters{Float64,String}(dict)    # JSON-like doubles + heap strings
+CloudBenchParameters(dict)                                  # Float32 + String (default)
+CloudBenchParameters{Float64,String}(dict)                  # JSON-like doubles + heap strings
+CloudBenchParameters{Float32,InlineStrings.String127}(dict) # opt-in isbits inline strings
 ```
 """
 struct CloudBenchParameters{T<:AbstractFloat,S<:AbstractString}
@@ -40,8 +42,16 @@ struct CloudBenchParameters{T<:AbstractFloat,S<:AbstractString}
     config_path::S
 end
 
-"""Default `parameters.json` parse: [`CloudBenchParameters`](@ref)`{Float32,InlineStrings.String127}`."""
-const CloudBenchParametersDefault = CloudBenchParameters{Float32,InlineStrings.String127}
+"""Default `parameters.json` parse type: [`CloudBenchParameters`](@ref)`{Float32,String}`."""
+const CloudBenchParametersDefault = CloudBenchParameters{Float32,String}
+
+"""
+[`CloudBenchParameters`](@ref)`{Float32,InlineStrings.String127}` — opt-in `isbits` storage for the string fields.
+Pass `string_type = InlineStrings.String127` (or another inline type) to the parse functions to obtain this. Note it
+throws if a path exceeds the inline capacity, so `String` (the default) is safer for the long upstream GCS paths in
+`sounding_path` / `config_path`.
+"""
+const CloudBenchParametersInline = CloudBenchParameters{Float32,InlineStrings.String127}
 
 function _as_float(::Type{T}, x)::T where {T<:AbstractFloat}
     x isa Integer && return T(x)
@@ -63,19 +73,21 @@ function _as_string(::Type{S}, x)::S where {S<:AbstractString}
 end
 
 """
-    CloudBenchParameters(d::AbstractDict)
+    CloudBenchParameters(d::AbstractDict; strict=true)
 
-Equivalent to `CloudBenchParameters{Float32,InlineStrings.String127}(d)`.
+Equivalent to `CloudBenchParameters{Float32,String}(d; strict)`.
 """
-CloudBenchParameters(d::AbstractDict) = CloudBenchParameters{Float32,InlineStrings.String127}(d)
+CloudBenchParameters(d::AbstractDict; strict::Bool = true) =
+    CloudBenchParameters{Float32,String}(d; strict = strict)
 
 """
-    CloudBenchParameters{T,S}(d::AbstractDict)
+    CloudBenchParameters{T,S}(d::AbstractDict; strict=true)
 
-Build from a `Dict{String,Any}`-like object (e.g. `JSON.parse` output). Requires exactly the known keys; any extra key
-raises `ArgumentError`.
+Build from a `Dict{String,Any}`-like object (e.g. `JSON.parse` output). Requires all known keys. With `strict=true`
+(default) any **extra** key raises `ArgumentError`; with `strict=false` extra keys are ignored with a `@warn`
+(forward-compatible with upstream schema additions).
 """
-function CloudBenchParameters{T,S}(d::AbstractDict) where {T<:AbstractFloat,S<:AbstractString}
+function CloudBenchParameters{T,S}(d::AbstractDict; strict::Bool = true) where {T<:AbstractFloat,S<:AbstractString}
     d = Dict{String,Any}(d)
     function popreq!(k::AbstractString, conv)
         haskey(d, k) || error("CloudBenchParameters: missing key $(repr(k)) in parameters.json")
@@ -94,11 +106,10 @@ function CloudBenchParameters{T,S}(d::AbstractDict) where {T<:AbstractFloat,S<:A
     irrad = popreq!("irrad", x -> _as_float(T, x))
     sounding_path = popreq!("sounding_path", x -> _as_string(S, x))
     config_path = popreq!("config_path", x -> _as_string(S, x))
-    isempty(d) || throw(
-        ArgumentError(
-            "CloudBenchParameters: unknown keys in parameters.json: $(repr(collect(keys(d))))",
-        ),
-    )
+    if !isempty(d)
+        msg = "CloudBenchParameters: unknown keys in parameters.json: $(repr(collect(keys(d))))"
+        strict ? throw(ArgumentError(msg)) : @warn(msg)
+    end
     return CloudBenchParameters{T,S}(
         experiment,
         month,
@@ -116,22 +127,24 @@ function CloudBenchParameters{T,S}(d::AbstractDict) where {T<:AbstractFloat,S<:A
     )
 end
 
-"""Read and parse `parameters.json` from disk (`T = Float32`, `S = InlineStrings.String127` by default)."""
+"""Read and parse `parameters.json` from disk (`T = Float32`, `S = String` by default; `strict` per [`CloudBenchParameters`](@ref))."""
 function read_cloudbench_parameters(
     path::AbstractString;
     float_type::Type{<:AbstractFloat}=Float32,
-    string_type::Type{<:AbstractString}=InlineStrings.String127,
+    string_type::Type{<:AbstractString}=String,
+    strict::Bool = true,
 )
-    return CloudBenchParameters{float_type,string_type}(JSON.parsefile(path))
+    return CloudBenchParameters{float_type,string_type}(JSON.parsefile(path); strict = strict)
 end
 
-"""Parse `parameters.json` from a JSON string (`T = Float32`, `S = InlineStrings.String127` by default)."""
+"""Parse `parameters.json` from a JSON string (`T = Float32`, `S = String` by default; `strict` per [`CloudBenchParameters`](@ref))."""
 function parse_cloudbench_parameters(
     json::AbstractString;
     float_type::Type{<:AbstractFloat}=Float32,
-    string_type::Type{<:AbstractString}=InlineStrings.String127,
+    string_type::Type{<:AbstractString}=String,
+    strict::Bool = true,
 )
-    return CloudBenchParameters{float_type,string_type}(JSON.parse(json))
+    return CloudBenchParameters{float_type,string_type}(JSON.parse(json); strict = strict)
 end
 
 function Base.show(io::IO, p::CloudBenchParameters)

@@ -3,10 +3,9 @@ using Logging: Logging
 const _cloudbench_logging_enabled = Ref(false)
 
 function __init__()
-    v = strip(get(ENV, "SWIRL_LM_CLOUDBENCH_LOGGING", ""))
-    if v in ("1", "true", "TRUE", "yes", "YES")
-        _cloudbench_logging_enabled[] = true
-    end
+    # Use the same (case-insensitive) parser as the rest of the package so the env var and the documented
+    # `1`/`true`/`yes`/`y`/`on` set agree. `Config` is a submodule and is fully loaded by the time `__init__` runs.
+    _cloudbench_logging_enabled[] = Config.parse_bool_env("SWIRL_LM_CLOUDBENCH_LOGGING", false)
     return nothing
 end
 

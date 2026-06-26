@@ -1,4 +1,5 @@
 [deps]
+Aqua = "4c88cf16-eb10-579e-8560-4a9242c79595"
 Distributed = "8ba89e20-285c-5b6f-9357-94700520ee1b"
 InlineStrings = "842dd82b-1e85-43dc-bf29-5d0ee9dffc48"
 NCDatasets = "85f8d34a-cbdd-5861-8df4-14fed0d494ab"
