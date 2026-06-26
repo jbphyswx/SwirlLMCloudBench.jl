@@ -17,8 +17,7 @@
 #   2. Paste the printed `[cloudbench_soundings]` block into `Artifacts.toml` (filling the release `url`).
 #   3. The runtime API (`Simulation.bundled_soundings_dir` / `bundled_sounding_path`) then serves them offline.
 
-using Pkg.Artifacts: create_artifact, archive_artifact, artifact_path
-using SHA: sha256, bytes2hex
+using Pkg.Artifacts: create_artifact, archive_artifact
 using SwirlLMCloudBench: Simulation as S
 
 function parse_args(argv)
@@ -69,8 +68,9 @@ function main(argv)
         return nothing
     end
 
-    tarball = archive_artifact(hash, opts.out)
-    tar_sha = bytes2hex(open(sha256, tarball))
+    # archive_artifact writes the tarball to `opts.out` and returns its sha256 (hex string)
+    tar_sha = archive_artifact(hash, opts.out)
+    tarball = opts.out
     sz = round(filesize(tarball) / 1024 / 1024; digits = 1)
 
     println("\n=== artifact built ===")

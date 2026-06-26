@@ -54,3 +54,5 @@ Artifacts.toml
 AGENTS.md
 MEMORY.md
 .agents
+# generated artifact tarballs (gen/build_sounding_artifact.jl)
+*.tar.gz
