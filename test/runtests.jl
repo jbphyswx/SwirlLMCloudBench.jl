@@ -122,14 +122,14 @@ end
     "sounding_path":"/x/sounding.csv","config_path":"/x/config.pbtxt"}
     """
     cp = S.parse_cloudbench_parameters(js)
-    @test cp isa S.CloudBenchParameters{Float32,String}
+    @test cp isa S.CloudBenchParameters{Float32,InlineStrings.String127}   # isbits default
     @test cp isa S.CloudBenchParametersDefault
     @test cp.experiment == "amip" && cp.month == 1
     @test cp.latitude ≈ 16.5f0 && cp.longitude ≈ -141.875f0
-    # opt-in isbits inline string storage still works (parametric)
-    cp_inline = S.parse_cloudbench_parameters(js; string_type = InlineStrings.String127)
-    @test cp_inline isa S.CloudBenchParametersInline
-    @test cp_inline.experiment == "amip"
+    # heap String storage available as an opt-in (for hypothetical longer paths)
+    cp_str = S.parse_cloudbench_parameters(js; string_type = String)
+    @test cp_str isa S.CloudBenchParameters{Float32,String}
+    @test cp_str.experiment == "amip"
     mktempdir() do dir
         p = joinpath(dir, "p.json")
         write(p, js)

@@ -13,9 +13,8 @@ Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 SwirlLMCloudBench = {path = "../../.."}
 
 [compat]
-# `~1.0` = [1.0.0, 1.1.0): ClimaAtmos 0.40 allows ClimaParams >=1.0.17, but 1.1.0 drops `EDMF_surface_area` from its
-# default TOML and breaks `ClimaAtmosParameters(FT)`. NOTE: caret `"1.0"` would WRONGLY allow 1.1.0 — must be `~1.0`.
-# (Upstream resolution quirk — revisit on ClimaAtmos bumps.)
-ClimaAtmos = "0.40"
-ClimaParams = "~1.0"
+# ClimaAtmos 0.41 works correctly with ClimaParams 1.1 (0.40 + ClimaParams 1.1 broke ClimaAtmosParameters because
+# 1.1 dropped EDMF_surface_area from its default TOML; fixed in 0.41).
+ClimaAtmos = "0.41"
+ClimaParams = "1"
 julia = "1.11"

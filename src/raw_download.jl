@@ -1,3 +1,4 @@
+using InlineStrings: InlineStrings
 using ..Config: Config
 
 """
@@ -76,7 +77,7 @@ When `download`, calls [`download_cloudbench_raw!`](@ref)(`inst`; `root`, `verbo
 
 Keyword `sounding_eltype` (default `Float32`) is forwarded to [`CloudBenchSounding`](@ref) when parsing `sounding.csv`.
 
-Keywords `parameters_float` (default `Float32`) and `parameters_string` (default `String`) are forwarded to
+Keywords `parameters_float` (default `Float32`) and `parameters_string` (default `InlineStrings.String127`) are forwarded to
 [`read_cloudbench_parameters`](@ref) when parsing `parameters.json`.
 
 `sim` may be a [`CloudBenchInstance`](@ref) or [`CloudBenchSimulation`](@ref) (catalog key only).
@@ -90,7 +91,7 @@ function load_cloudbench_simulation(
     local_mirror::Bool = true,
     sounding_eltype::Type{<:AbstractFloat}=Float32,
     parameters_float::Type{<:AbstractFloat}=Float32,
-    parameters_string::Type{<:AbstractString}=String,
+    parameters_string::Type{<:AbstractString}=InlineStrings.String127,
     verbose::Union{Nothing,Bool} = nothing,
 )
     r = root === nothing ? Config.raw_download_root() : String(normpath(expanduser(String(root))))

@@ -1,3 +1,4 @@
+using InlineStrings: InlineStrings
 using ..Catalog: Catalog
 
 # --- Abstract hierarchy ---
@@ -62,7 +63,7 @@ end
 with value `nothing` (no parsed object). Typical shapes:
 
 - `CloudBenchMetadata{Nothing,Nothing}` — remote / catalog-only (see [`CloudBenchMetadataEmpty`](@ref)).
-- `CloudBenchMetadata{CloudBenchParameters{Tf,Ss},CloudBenchSounding{Ts,V}}` — both files loaded from disk (defaults: `Tf=Float32`, `Ss=String` for parameters JSON; `Ts=Float32`, `V=Vector{Float32}` for sounding).
+- `CloudBenchMetadata{CloudBenchParameters{Tf,Ss},CloudBenchSounding{Ts,V}}` — both files loaded from disk (defaults: `Tf=Float32`, `Ss=InlineStrings.String127` for parameters JSON; `Ts=Float32`, `V=Vector{Float32}` for sounding).
 
 Other combinations (e.g. parameters-only) are valid if you construct them; there is no `Union` on the fields.
 """
@@ -122,13 +123,13 @@ const CloudBenchSimulationRemote = CloudBenchSimulation{CloudBenchMetadataEmpty,
 
 """[`CloudBenchSimulation`](@ref) with parsed parameters and [`CloudBenchSounding{Float32,Vector{Float32}}`](@ref) + [`LocalCloudBenchMirrorOutput`](@ref)."""
 const CloudBenchSimulationLoaded = CloudBenchSimulation{
-    CloudBenchMetadata{CloudBenchParameters{Float32,String},CloudBenchSounding{Float32,Vector{Float32}}},
+    CloudBenchMetadata{CloudBenchParameters{Float32,InlineStrings.String127},CloudBenchSounding{Float32,Vector{Float32}}},
     LocalCloudBenchMirrorOutput,
 }
 
 """[`CloudBenchSimulation`](@ref) with parsed parameters and [`CloudBenchSounding{Float32,Vector{Float32}}`](@ref) + [`RemoteCloudBenchZarrOutput`](@ref) (HTTPS Zarr only)."""
 const CloudBenchSimulationRemoteLoaded = CloudBenchSimulation{
-    CloudBenchMetadata{CloudBenchParameters{Float32,String},CloudBenchSounding{Float32,Vector{Float32}}},
+    CloudBenchMetadata{CloudBenchParameters{Float32,InlineStrings.String127},CloudBenchSounding{Float32,Vector{Float32}}},
     RemoteCloudBenchZarrOutput,
 }
 
