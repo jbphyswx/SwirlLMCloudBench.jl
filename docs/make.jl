@@ -19,5 +19,5 @@ Documenter.makedocs(;
 Documenter.deploydocs(;
     repo = "github.com/jbphyswx/SwirlLMCloudBench.jl",
     devbranch = "main",
-    push_preview = true,
+    push_preview = false,   # build docs on PRs (catch errors); deploy only on pushes to main
 )

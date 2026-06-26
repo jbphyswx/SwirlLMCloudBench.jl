@@ -3,7 +3,8 @@ on:
   push:
     branches:
       - main
-    tags: ['*']
+    tags:
+      - '*'
   pull_request:
 
 concurrency:
@@ -36,7 +37,7 @@ jobs:
       - uses: codecov/codecov-action@v7
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
-          file: lcov.info
+          files: lcov.info
 
   clima-ext:
     name: ClimaAtmos extension
@@ -55,6 +56,8 @@ jobs:
   docs:
     name: docs
     runs-on: ubuntu-latest
+    permissions:
+      contents: write   # allow the Documenter deploy to push to gh-pages on main
     steps:
       - uses: actions/checkout@v6
       - uses: julia-actions/setup-julia@v3
