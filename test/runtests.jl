@@ -199,6 +199,16 @@ if get(ENV, "CLOUDBENCH_NETWORK_TEST", "") == "1"
             @test bundle.output.root == root
         end
     end
+
+    @testset "bundled soundings artifact (network)" begin
+        inst = S.CloudBenchInstance(0, 1, :amip)
+        d = S.bundled_soundings_dir()                       # downloads the ~10 MB artifact once
+        @test isdir(d)
+        @test isfile(S.bundled_sounding_path(inst))
+        @test isfile(S.bundled_parameters_path(inst))
+        snd = S.bundled_sounding(inst)
+        @test snd isa S.CloudBenchSounding && length(snd.z) >= 2
+    end
 end
 
 @testset "q_c split (Swirl-LM condensate_liquid_fraction)" begin

@@ -1,0 +1,11 @@
+# Lazy Pkg artifact: bundled CloudBench `sounding.csv` + `parameters.json` for the full catalog
+# (500 sites × 4 months × 5 experiments = 10,000 cases, ~10 MB gz). Downloaded once into the depot on first use
+# (see `Simulation.bundled_soundings_dir`). The multi-TB `data.zarr` is streamed, not bundled. Rebuild with
+# `gen/build_sounding_artifact.jl`.
+[cloudbench_soundings]
+git-tree-sha1 = "de4bb04b6f4f0b5531e82e9f236970069692df7b"
+lazy = true
+
+    [[cloudbench_soundings.download]]
+    url = "https://github.com/jbphyswx/SwirlLMCloudBench.jl/releases/download/soundings-v1/cloudbench_soundings.tar.gz"
+    sha256 = "2db7ee83d06bbd65ce3c93086f5d7a05d7419349aed698f7bef5c8f7b699b99e"

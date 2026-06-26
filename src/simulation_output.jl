@@ -29,5 +29,6 @@ include(joinpath(@__DIR__, "zarr_dataset.jl"))
 include(joinpath(@__DIR__, "sounding_netcdf.jl"))
 include(joinpath(@__DIR__, "selection.jl"))
 include(joinpath(@__DIR__, "raw_download.jl"))
+include(joinpath(@__DIR__, "bundled.jl"))
 
 end

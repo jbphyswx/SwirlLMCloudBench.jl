@@ -7,10 +7,12 @@ authors = ["CliMA Contributors"]
 projects = ["test"]
 
 [deps]
+Artifacts = "56f22d72-fd6d-98f1-02f0-08ddc0907c33"
 CSV = "336ed68f-0bac-5ca0-87d4-7b16caf5d00b"
 Downloads = "f43a241f-c20a-4ad4-852c-f6b1247861c6"
 InlineStrings = "842dd82b-1e85-43dc-bf29-5d0ee9dffc48"
 JSON = "682c06a0-de6a-54ab-a142-c8b1cf79cde6"
+LazyArtifacts = "4af54fe1-eca0-43a8-85a7-787d91b784e3"
 Logging = "56ddb016-857b-54e1-b83d-db4d58db5568"
 NCDatasets = "85f8d34a-cbdd-5861-8df4-14fed0d494ab"
 Scratch = "6c6a2e73-6563-6170-7368-637461726353"
@@ -28,6 +30,7 @@ SwirlLMCloudBenchDistributedExt = ["Distributed"]
 SwirlLMCloudBenchOhMyThreadsExt = ["OhMyThreads"]
 
 [compat]
+Artifacts = "1"
 CSV = "0.10"
 ClimaAtmos = "0.40"
 ClimaCore = "0.14"
@@ -35,6 +38,7 @@ Distributed = "1"
 Downloads = "1.6"
 InlineStrings = "1"
 JSON = "1"
+LazyArtifacts = "1"
 Logging = "1"
 NCDatasets = "0.14"
 OhMyThreads = "0.8"
