@@ -1,4 +1,3 @@
-using InlineStrings: InlineStrings
 using ..Catalog: Catalog
 
 # --- Abstract hierarchy ---
@@ -63,7 +62,7 @@ end
 with value `nothing` (no parsed object). Typical shapes:
 
 - `CloudBenchMetadata{Nothing,Nothing}` — remote / catalog-only (see [`CloudBenchMetadataEmpty`](@ref)).
-- `CloudBenchMetadata{CloudBenchParameters{Tf,Ss},CloudBenchSounding{Ts,V}}` — both files loaded from disk (defaults: `Tf=Float32`, `Ss=InlineStrings.String127` for parameters JSON; `Ts=Float32`, `V=Vector{Float32}` for sounding).
+- `CloudBenchMetadata{CloudBenchParameters{Tf,Ss},CloudBenchSounding{Ts,V}}` — both files loaded from disk (defaults: `Tf=Float32`, `Ss=String` for parameters JSON; `Ts=Float32`, `V=Vector{Float32}` for sounding).
 
 Other combinations (e.g. parameters-only) are valid if you construct them; there is no `Union` on the fields.
 """
@@ -123,13 +122,13 @@ const CloudBenchSimulationRemote = CloudBenchSimulation{CloudBenchMetadataEmpty,
 
 """[`CloudBenchSimulation`](@ref) with parsed parameters and [`CloudBenchSounding{Float32,Vector{Float32}}`](@ref) + [`LocalCloudBenchMirrorOutput`](@ref)."""
 const CloudBenchSimulationLoaded = CloudBenchSimulation{
-    CloudBenchMetadata{CloudBenchParameters{Float32,InlineStrings.String127},CloudBenchSounding{Float32,Vector{Float32}}},
+    CloudBenchMetadata{CloudBenchParameters{Float32,String},CloudBenchSounding{Float32,Vector{Float32}}},
     LocalCloudBenchMirrorOutput,
 }
 
 """[`CloudBenchSimulation`](@ref) with parsed parameters and [`CloudBenchSounding{Float32,Vector{Float32}}`](@ref) + [`RemoteCloudBenchZarrOutput`](@ref) (HTTPS Zarr only)."""
 const CloudBenchSimulationRemoteLoaded = CloudBenchSimulation{
-    CloudBenchMetadata{CloudBenchParameters{Float32,InlineStrings.String127},CloudBenchSounding{Float32,Vector{Float32}}},
+    CloudBenchMetadata{CloudBenchParameters{Float32,String},CloudBenchSounding{Float32,Vector{Float32}}},
     RemoteCloudBenchZarrOutput,
 }
 
@@ -173,6 +172,10 @@ function Base.getproperty(s::CloudBenchSimulation, sym::Symbol)
     return getproperty(cloudbench_instance(s), sym)
 end
 
+# Make the forwarded catalog-key fields discoverable (tab-completion / `propertynames`).
+Base.propertynames(::CloudBenchSimulation, private::Bool = false) =
+    (:metadata, :output, :site_id, :month, :experiment)
+
 function Base.:(==)(a::CloudBenchMetadata, b::CloudBenchMetadata)
     typeof(a) === typeof(b) || return false
     return a.instance == b.instance && a.parameters == b.parameters && a.sounding == b.sounding
@@ -191,6 +194,23 @@ end
 
 Base.:(==)(a::CloudBenchInstance, b::CloudBenchInstance) =
     a.site_id == b.site_id && a.month == b.month && a.experiment == b.experiment
+
+# --- hash, consistent with the custom `==` above (so these are valid Dict/Set keys) ---
+# Defaults are insufficient for the metadata/simulation chain because they contain a `CloudBenchSounding`
+# (a struct of mutable `Vector`s), whose default object hash is identity-based; we hash by content via the
+# `hash(::CloudBenchSounding, …)` method in sounding.jl. `nothing` slots and `String`/isbits fields hash fine.
+
+Base.hash(x::CloudBenchInstance, h::UInt) =
+    hash(x.experiment, hash(x.month, hash(x.site_id, hash(:CloudBenchInstance, h))))
+
+Base.hash(m::CloudBenchMetadata, h::UInt) =
+    hash(m.sounding, hash(m.parameters, hash(m.instance, hash(:CloudBenchMetadata, h))))
+
+Base.hash(::RemoteCloudBenchZarrOutput, h::UInt) = hash(:RemoteCloudBenchZarrOutput, h)
+Base.hash(o::LocalCloudBenchMirrorOutput, h::UInt) = hash(o.root, hash(:LocalCloudBenchMirrorOutput, h))
+
+Base.hash(s::CloudBenchSimulation, h::UInt) =
+    hash(getfield(s, :output), hash(getfield(s, :metadata), hash(:CloudBenchSimulation, h)))
 
 # --- Compact display (avoid dumping large nested structs in the REPL) ---
 

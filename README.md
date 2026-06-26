@@ -11,7 +11,7 @@ Use this package to build URLs, download `sounding.csv` / `parameters.json`, ope
 
 **Optional extensions** (loaded when the corresponding package is available):
 
-- **ClimaAtmos** — GCM-style column-forcing NetCDF (`zg`, `ta`, …) and config overlays for single-column workflows (distinct from base `Simulation` NetCDF, which keeps CloudBench `sounding.csv` names).
+- **ClimaAtmos** — drive a single-column ClimaAtmos run with forcing from a CloudBench sounding: in-memory `cloudbench_forcing` / `cloudbench_setup`, or a `GCMForcing`-schema NetCDF via `write_clima_gcm_forcing_sounding_netcdf!`, reusing ClimaAtmos's own GCM-driven (Shen et al. 2022) physics — the same forcing methodology CloudBench was run with.
 - **OhMyThreads** — `cloudbench_tmap` for threaded iteration over collections (e.g. many `CloudBenchSimulation` / `CloudBenchInstance` values).
 - **Distributed** — `cloudbench_pmap_download_raw!` to download many simulations in parallel (`pmap` over `download_cloudbench_raw!`).
 
@@ -33,15 +33,15 @@ Condensed-phase **`q_c`** in CloudBench is described in the upstream README (wit
 |------|------------------|
 | Core (`Catalog`, `Paths`, `Config`, `Artifacts`) | Case indices, months, experiment names, default roots, artifact resolution. |
 | **`Simulation`** | `CloudBenchInstance`, `CloudBenchSimulation` (metadata + output backend), URLs, `download_cloudbench_raw!`, Scratch/env-backed **`Config.raw_download_root()`**, **`open_zarr`** (HTTPS), **`open_zarr_local`** (path + instance, or a simulation with **`LocalCloudBenchMirrorOutput`**), sounding NetCDF helpers, **`split_q_c`**, **`CloudBenchSelection`**. Catalog keys and selection need no network. Mirroring the full Zarr store via `download_cloudbench_raw!(…; zarr=true)` is not supported yet — use **`open_zarr`** for remote lazy access. |
-| **ClimaAtmos extension** | `prepare_climaatmos_cloudbench_worktree!`, `write_clima_gcm_forcing_sounding_netcdf!`, `ensure_clima_sounding_netcdf!`, `clima_column_forcing_overlay`, overlay merge helpers, `climaatmos_pkg_version`. |
+| **ClimaAtmos extension** | `cloudbench_forcing` / `cloudbench_setup` (in-memory GCM-driven forcing + initial conditions), `write_clima_gcm_forcing_sounding_netcdf!` / `ensure_clima_gcm_forcing_netcdf!` (GCMForcing-schema NetCDF), `climaatmos_pkg_version`. |
 | **OhMyThreads extension** | `cloudbench_tmap`. |
 | **Distributed extension** | `cloudbench_pmap_download_raw!` (parallel raw downloads). |
 
 Example (ClimaAtmos extension):
 
 ```julia
-using SwirlLMCloudBench
-using ClimaAtmos   # activates the extension when versions are compatible
+using SwirlLMCloudBench: SwirlLMCloudBench, Simulation as S
+using ClimaAtmos: ClimaAtmos   # activates the extension when versions are compatible
 ```
 
 ## Install
@@ -67,7 +67,7 @@ Or add a `path` dependency in your project’s `Project.toml`.
 The examples below assume:
 
 ```julia
-using SwirlLMCloudBench: Catalog, Paths, Config, Artifacts, Simulation as S
+using SwirlLMCloudBench: Catalog, Paths, Config, CaseDirs, Simulation as S
 ```
 
 In the Julia REPL, `?S.CloudBenchSimulation`, `?S.CloudBenchInstance`, `?S.open_zarr`, etc. show the full docstrings (or use the fully qualified `SwirlLMCloudBench.Simulation.…` names).
@@ -156,29 +156,46 @@ end
 
 `S.CloudBenchSelection()` with no arguments spans the full published catalog (500 × 4 months × 5 experiments).
 
-### ClimaAtmos column setup (extension)
+### Drive ClimaAtmos with CloudBench forcing (extension)
 
-With **`ClimaAtmos`** in the environment, the extension loads automatically when both packages are available.
+With **`ClimaAtmos`** (+ `ClimaCore`) in the environment the extension loads automatically. It reuses ClimaAtmos's
+GCM-driven (Shen et al. 2022) cache + tendency — the **same** forcing methodology (large-scale advection + subsidence +
+height-dependent relaxation/nudging) the Swirl-LM CloudBench LES were run with — so the ClimaAtmos columns are comparable.
+
+**In-memory (recommended; no files):**
 
 ```julia
-using ClimaAtmos, SwirlLMCloudBench
-using SwirlLMCloudBench: Simulation as S
+using ClimaAtmos: ClimaAtmos
+using SwirlLMCloudBench: SwirlLMCloudBench, Simulation as S
 
-sim = S.CloudBenchSimulation(10, 7, :amip)
-prep = SwirlLMCloudBench.prepare_climaatmos_cloudbench_worktree!(
-    "/path/to/my_experiment_dir",
-    sim;
-    netcdf_group = "10",   # often aligned with cfsite_number / GCM forcing group name
-)
-# prep.sounding_csv_path, prep.forcing_path, prep.column_forcing_overlay
-# Merge prep.column_forcing_overlay into your case dict, e.g.:
-# SwirlLMCloudBench.merge_clima_cloudbench_overlay!(case_dict, prep.column_forcing_overlay)
-# SwirlLMCloudBench.merge_clima_gcmdriven_forcing_keys!(case_dict, prep.column_forcing_overlay)
+sim   = S.CloudBenchSimulation(10, 7, :amip)
+setup = SwirlLMCloudBench.cloudbench_setup(sim)   # initial conditions AND forcing from the sounding (downloads it once)
+
+# pass `setup` straight to ClimaAtmos (alongside your usual grid / params / dt / t_end / output):
+# asim = ClimaAtmos.AtmosSimulation{Float64}(; setup,
+#            grid   = ClimaAtmos.ColumnGrid(Float64; z_elem = 60, z_max = 30000.0),
+#            params = ClimaAtmos.ClimaAtmosParameters(Float64), ...)
+
+# or build just the forcing object to attach to your own model/setup:
+forcing = SwirlLMCloudBench.cloudbench_forcing(sim)                 # nudging ON (matches CloudBench)
+forcing = SwirlLMCloudBench.cloudbench_forcing(sim; nudge = false)  # advection + subsidence only
 ```
 
-Optional: set `ENV["SWIRL_LM_CLOUDBENCH_EXTERNAL_FORCING_FILE"]` to force a particular NetCDF path in the overlay.
+Nudging is **on by default** (mirrors how CloudBench was run). For *exact* comparability also set ClimaAtmos's relaxation
+parameters (`gcmdriven_scalar_relaxation_timescale`, `gcmdriven_momentum_relaxation_timescale`,
+`gcmdriven_relaxation_{minimum,maximum}_height`) to the Swirl-LM CloudBench values (`tau_r_tropo`, `tau_r_wind`,
+`z_i`, `z_r`).
 
-For a portable NetCDF copy of the sounding with **CloudBench** names (`z`, `temperature`, `q_t`, …), use `SwirlLMCloudBench.Simulation.write_sounding_netcdf!` / `ensure_sounding_netcdf!` instead of the extension helpers above.
+**File-based (`GCMForcing` interop):**
+
+```julia
+nc   = SwirlLMCloudBench.ensure_clima_gcm_forcing_netcdf!("forcing.nc", sim, "site10")
+gcmf = ClimaAtmos.GCMForcing{Float64}(nc, "site10")
+```
+
+The in-memory path is exact; the file path reconstructs subsidence/eddy terms through `GCMForcing`'s schema (small,
+documented differences — see the extension docstring). For a portable NetCDF of the *raw* sounding with **CloudBench**
+names (`z`, `temperature`, `q_t`, …), use `S.write_sounding_netcdf!` / `S.ensure_sounding_netcdf!` instead.
 
 ### Parallel sweeps (threads)
 
@@ -218,10 +235,13 @@ Environment overrides:
 - `SWIRL_LM_CLOUDBENCH_DATA_ROOT`
 - `SWIRL_LM_CLOUDBENCH_CACHE_ROOT`
 - `SWIRL_LM_CLOUDBENCH_RAW_ROOT` — parent directory for bucket-shaped raw downloads (default: Scratch space `cloudbench_raw` in the Julia depot)
-- `SWIRL_LM_CLOUDBENCH_EXTERNAL_FORCING_FILE` (optional; Clima extension when building overlays)
 - `SWIRL_LM_CLOUDBENCH_LOGGING` — set to `1` / `true` / `yes` before `using` to enable optional download/Zarr/NetCDF info messages by default (or call `cloudbench_logging!(true)` at runtime). Per-call override: pass `verbose=true` / `verbose=false` on functions that support it (`nothing` keeps the global default).
 
-Routine downloads use **Scratch** (mutable, depot-local). [Pkg artifacts](https://pkgdocs.julialang.org/v1/artifacts/) are immutable and are **not** the default cache; you can pin artifacts in your own project if you need reproducible snapshots.
+Routine downloads use **Scratch** (mutable, depot-local, grown incrementally). The full ~2 TB `data.zarr` is **streamed**
+over HTTPS, never mirrored — [Pkg artifacts](https://pkgdocs.julialang.org/v1/artifacts/) are immutable, content-addressed
+blobs fetched whole, a poor fit for a multi-terabyte store accessed in arbitrary subsets, which is why the cache is
+rolled-own. The small sounding-CSV set (~50 MB raw / ~20 MB gzipped for all 10,000 cases) *is* a good artifact candidate;
+a bundled soundings artifact for fast offline catalog queries is planned (see `gen/build_sounding_artifact.jl`).
 
 **Precedence:** an explicit `root=` on download/load functions overrides `SWIRL_LM_CLOUDBENCH_RAW_ROOT`, which overrides the Scratch default.
 
@@ -230,12 +250,12 @@ Routine downloads use **Scratch** (mutable, depot-local). [Pkg artifacts](https:
 | Submodule          | Role |
 |--------------------|------|
 | `Catalog`          | Case range `0:499`, months `(1, 4, 7, 10)`, `EXPERIMENTS` / `CloudBenchExperiment`, `gcs_path_segment` |
-| `Paths`            | `package_root`, default roots, `case_artifact_dir` |
+| `Paths`            | `package_root`, `default_data_root`, `default_cache_root` |
 | `Config`           | `data_root()`, `cache_root()`, `raw_download_root()`, `parse_bool_env` |
-| `Artifacts`        | `resolved_case_dir(experiment, case_index; month=…)` |
+| `CaseDirs`         | `resolved_case_dir(site_id, month, experiment; root=…)` (canonical bucket layout) |
 | `Simulation` | `CloudBenchInstance`, `CloudBenchSimulation`, `CloudBenchMetadata{P,S}`, `CloudBenchMetadataEmpty`, `CloudBenchSimulationRemote`, `CloudBenchSimulationLoaded`, `CloudBenchSimulationRemoteLoaded`, output types (`RemoteCloudBenchZarrOutput`, `LocalCloudBenchMirrorOutput`), `load_cloudbench_simulation`, `CloudBenchSounding`, `CloudBenchParameters`, bucket URLs, `download_cloudbench_raw!`, `open_zarr`, `open_zarr_local`, sounding NetCDF, `CloudBenchSelection` |
 
-The main module exports only the submodules `Catalog`, `Paths`, `Config`, `Artifacts`, and `Simulation`. Names defined inside `Simulation` are not re-exported at package scope; use e.g. `using SwirlLMCloudBench: Simulation as S` (or fully qualified `SwirlLMCloudBench.Simulation.…` names) for simulation and I/O APIs.
+The main module exports only the submodules `Catalog`, `Paths`, `Config`, `CaseDirs`, and `Simulation`. Names defined inside `Simulation` are not re-exported at package scope; use e.g. `using SwirlLMCloudBench: Simulation as S` (or fully qualified `SwirlLMCloudBench.Simulation.…` names) for simulation and I/O APIs.
 
 ## Tests
 

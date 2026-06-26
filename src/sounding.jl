@@ -270,11 +270,12 @@ function cloudbench_sounding_zt_matrices(sounding::CloudBenchSounding, nt::Int)
     v_zt = _profile_replicated(sounding.v, nz, nt)
     rho_zt = _profile_replicated(sounding.rho, nz, nt)
     w_zt = _profile_replicated(sounding.w, nz, nt)
-    Tvec = collect(sounding.temperature)
-    qvec = collect(sounding.q_t)
-    wvec = collect(sounding.w)
-    tadv = collect(sounding.T_adv_src)
-    qadv = collect(sounding.q_t_adv_src)
+    # alias the stored profiles directly (read-only here; the upwind/broadcast ops below work on any AbstractVector)
+    Tvec = sounding.temperature
+    qvec = sounding.q_t
+    wvec = sounding.w
+    tadv = sounding.T_adv_src
+    qadv = sounding.q_t_adv_src
     vadv_T = _column_upwind_w_dphi_dz(wvec, Tvec, z)
     vadv_q = _column_upwind_w_dphi_dz(wvec, qvec, z)
     # Remove an estimate of the vertical component from the total advective
@@ -347,6 +348,24 @@ function _profile_replicated(profile::AbstractVector{T}, nz, nt) where {T}
         mat[:, j] .= profile
     end
     return mat
+end
+
+# Value semantics: the struct holds mutable `Vector`s, so the `===`-based fallbacks compare/hash by identity.
+# Define `==`/`hash` by content so two independently-parsed-but-equal soundings compare equal (and `CloudBenchMetadata`
+# equality, which delegates here, works for loaded simulations).
+function Base.:(==)(a::CloudBenchSounding, b::CloudBenchSounding)
+    for f in fieldnames(CloudBenchSounding)
+        getfield(a, f) == getfield(b, f) || return false
+    end
+    return true
+end
+
+function Base.hash(s::CloudBenchSounding, h::UInt)
+    h = hash(:CloudBenchSounding, h)
+    for f in fieldnames(CloudBenchSounding)
+        h = hash(getfield(s, f), h)
+    end
+    return h
 end
 
 function Base.show(io::IO, s::CloudBenchSounding)

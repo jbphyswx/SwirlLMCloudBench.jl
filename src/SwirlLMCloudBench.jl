@@ -6,7 +6,7 @@ ensemble outputs: catalog constants (cases, months, experiments), configurable l
 and access to published **`sounding.csv`** / **`data.zarr`** via submodule [`Simulation`](@ref).
 
 Registered **dependencies** include `Zarr`, `CSV`, `Downloads`, `NCDatasets`, `JSON`, and `Scratch` (default raw download cache).
-**`SwirlLMCloudBenchClimaAtmosExt`** loads when you use `ClimaAtmos` alongside this package; it writes **GCM-style** column-forcing NetCDF and merges paths into parsed configs (base `Simulation` NetCDF mirrors CloudBench `sounding.csv` names).
+**`SwirlLMCloudBenchClimaAtmosExt`** loads with `ClimaAtmos`; it drives a single-column ClimaAtmos run with forcing from a CloudBench sounding — in-memory via [`cloudbench_forcing`](@ref) / [`cloudbench_setup`](@ref), or a `GCMForcing`-schema NetCDF via [`write_clima_gcm_forcing_sounding_netcdf!`](@ref) — reusing ClimaAtmos's GCM-driven (Shen et al. 2022) physics, the same methodology CloudBench was run with.
 **`SwirlLMCloudBenchOhMyThreadsExt`** loads when you use `OhMyThreads` (threaded helpers over collections).
 **`SwirlLMCloudBenchDistributedExt`** loads when you use `Distributed` (parallel raw downloads via [`cloudbench_pmap_download_raw!`](@ref)).
 See `README.md`.
@@ -14,15 +14,15 @@ See `README.md`.
 # Submodules
 
 - `Catalog` — valid case indices (`0:499`), seasonal months, experiment IDs.
-- `Paths` — package-relative defaults and `case_artifact_dir` layout.
+- `Paths` — package-relative defaults (`package_root`, `default_data_root`, `default_cache_root`).
 - `Config` — `ENV`-driven `data_root` / `cache_root` / `raw_download_root` (Scratch-backed default for raw bucket mirror layout).
-- `Artifacts` — `resolved_case_dir` combining the above.
+- `CaseDirs` — `resolved_case_dir` (canonical bucket layout `[root]/[site_id]/[month]/[experiment]/`) combining the above.
 - `Simulation` — `CloudBenchInstance`, `CloudBenchSimulation`, URLs, lazy [`Simulation.open_zarr`](@ref), `CloudBenchSounding`,
   [`Simulation.write_sounding_netcdf!`](@ref) / [`Simulation.ensure_sounding_netcdf!`](@ref),
   [`Simulation.split_q_c`](@ref) (Swirl-LM liquid fraction on `q_c`), lazy [`Simulation.CloudBenchSelection`](@ref).
 
 CloudBench labels simulations with integer **`site_id`** in `0:499`, months `{1,4,7,10}`, and experiment segments per
-the upstream README. With `ClimaAtmos` loaded, this module also exposes Clima-oriented helpers (e.g. [`prepare_climaatmos_cloudbench_worktree!`](@ref)).
+the upstream README. With `ClimaAtmos` loaded, this module also exposes Clima-oriented helpers (e.g. [`cloudbench_forcing`](@ref), [`cloudbench_setup`](@ref)).
 
 # Environment variables
 
@@ -31,16 +31,15 @@ the upstream README. With `ClimaAtmos` loaded, this module also exposes Clima-or
 | `SWIRL_LM_CLOUDBENCH_DATA_ROOT` | Override root for mirrored CloudBench data (default: `<package>/data`) |
 | `SWIRL_LM_CLOUDBENCH_CACHE_ROOT` | Override scratch/cache directory (default: `<package>/scratch`) |
 | `SWIRL_LM_CLOUDBENCH_RAW_ROOT` | Override parent directory for raw bucket layout downloads (`[root]/[SITE_ID]/[MONTH]/[EXPERIMENT]/`); when unset, uses [Scratch.jl](https://github.com/JuliaPackaging/Scratch.jl) under the Julia depot |
-| `SWIRL_LM_CLOUDBENCH_EXTERNAL_FORCING_FILE` | Optional absolute path to column-forcing NetCDF (used when building Clima column overlays; overrides constructed paths) |
 | `SWIRL_LM_CLOUDBENCH_LOGGING` | If `1` / `true` / `yes` (case-insensitive), enable optional `@info`-style messages by default at load time; or use [`cloudbench_logging!`](@ref)(`true`). Per-call: `verbose=true` / `false` on supported APIs (`nothing` uses the global default). |
 
 # Example
 
 ```julia
-using SwirlLMCloudBench: Catalog, Config, Artifacts
+using SwirlLMCloudBench: Catalog, Config, CaseDirs
 
 Catalog.n_cases()  # 500
-Artifacts.resolved_case_dir(:amip, 0; month=1)
+CaseDirs.resolved_case_dir(0, 1, :amip)   # <data_root>/0/1/amip
 ```
 
 For `Simulation` APIs, either call `SwirlLMCloudBench.Simulation.open_zarr(...)` or
@@ -52,10 +51,10 @@ include("logging.jl")
 include("paths.jl")
 include("catalog.jl")
 include("config.jl")
-include("artifacts.jl")
+include("case_dirs.jl")
 include("simulation_output.jl")
 
-export Catalog, Paths, Config, Artifacts, Simulation
+export Catalog, Paths, Config, CaseDirs, Simulation
 
 """Same as `Catalog.CLOUDBENCH_CASE_INDICES` (case index range)."""
 cases_range() = Catalog.CLOUDBENCH_CASE_INDICES
@@ -67,18 +66,14 @@ months_tuple() = Catalog.CLOUDBENCH_MONTHS
 experiments_val() = Val.(Catalog.EXPERIMENTS)
 
 # --- Optional weak-dep API (methods added when extensions load; MethodError if called without the extra package) ---
-const CLIMA_COLUMN_OVERLAY_NETCDF_GROUP_KEY = "column_forcing_nc_group"
+# ClimaAtmos extension (SwirlLMCloudBenchClimaAtmosExt): single-column forcing from a CloudBench sounding,
+# reusing ClimaAtmos's GCM-driven (Shen et al. 2022) cache + tendency.
 function climaatmos_pkg_version end
-function clima_column_forcing_overlay end
-function ensure_clima_sounding_netcdf! end
-function write_clima_gcm_forcing_sounding_netcdf! end
-function prepare_climaatmos_cloudbench_worktree! end
-function merge_clima_cloudbench_overlay! end
-function merge_clima_gcmdriven_forcing_keys! end
-function write_clima_tv_flat_forcing_netcdf_from_sounding! end
-function build_provided_column_tv_forcing_from_nc end
-function build_provided_column_tv_forcing_from_cloudbench_sounding end
-function cloudbench_provided_column_tv_forcing end
+function cloudbench_forcing end                       # in-memory CloudBenchForcing (GCM-driven forcing object)
+function cloudbench_setup end                          # CloudBenchSetup (ICs + forcing) for ClimaAtmos.AtmosSimulation
+function write_clima_gcm_forcing_sounding_netcdf! end  # GCMForcing-schema NetCDF from a sounding
+function ensure_clima_gcm_forcing_netcdf! end          # ensure sounding local, then write the GCMForcing NetCDF
+# OhMyThreads / Distributed extensions:
 function cloudbench_tmap end
 function cloudbench_pmap_download_raw! end
 

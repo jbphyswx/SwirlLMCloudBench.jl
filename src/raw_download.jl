@@ -1,5 +1,3 @@
-using InlineStrings: InlineStrings
-using Downloads: Downloads
 using ..Config: Config
 
 """
@@ -27,13 +25,12 @@ function download_cloudbench_raw!(
     zarr && throw(ArgumentError("mirroring data.zarr is not implemented; use open_zarr(sim) for HTTPS lazy access"))
     r = root === nothing ? Config.raw_download_root() : String(normpath(expanduser(String(root))))
     dir = local_simulation_dir(r, inst)
-    mkpath(dir)
     if sounding
         dest = sounding_path(inst, r)
         if !isfile(dest)
             url = cloudbench_sounding_url(inst)
             _Pkg.cloudbench_info("Downloading CloudBench sounding.csv"; verbose, url, dest)
-            Downloads.download(url, dest)
+            _download_atomic(url, dest)
         end
     end
     if parameters
@@ -41,7 +38,7 @@ function download_cloudbench_raw!(
         if !isfile(dest)
             url = cloudbench_parameters_url(inst)
             _Pkg.cloudbench_info("Downloading CloudBench parameters.json"; verbose, url, dest)
-            Downloads.download(url, dest)
+            _download_atomic(url, dest)
         end
     end
     return dir
@@ -79,7 +76,7 @@ When `download`, calls [`download_cloudbench_raw!`](@ref)(`inst`; `root`, `verbo
 
 Keyword `sounding_eltype` (default `Float32`) is forwarded to [`CloudBenchSounding`](@ref) when parsing `sounding.csv`.
 
-Keywords `parameters_float` (default `Float32`) and `parameters_string` (default `InlineStrings.String127`) are forwarded to
+Keywords `parameters_float` (default `Float32`) and `parameters_string` (default `String`) are forwarded to
 [`read_cloudbench_parameters`](@ref) when parsing `parameters.json`.
 
 `sim` may be a [`CloudBenchInstance`](@ref) or [`CloudBenchSimulation`](@ref) (catalog key only).
@@ -93,7 +90,7 @@ function load_cloudbench_simulation(
     local_mirror::Bool = true,
     sounding_eltype::Type{<:AbstractFloat}=Float32,
     parameters_float::Type{<:AbstractFloat}=Float32,
-    parameters_string::Type{<:AbstractString}=InlineStrings.String127,
+    parameters_string::Type{<:AbstractString}=String,
     verbose::Union{Nothing,Bool} = nothing,
 )
     r = root === nothing ? Config.raw_download_root() : String(normpath(expanduser(String(root))))
