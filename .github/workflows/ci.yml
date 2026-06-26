@@ -37,7 +37,7 @@ jobs:
       - uses: codecov/codecov-action@v7
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
-          file: lcov.info
+          files: lcov.info
 
   clima-ext:
     name: ClimaAtmos extension
