@@ -20,20 +20,18 @@ Zarr = "0a941bbe-ad1d-11e8-39d9-ab76183a1d99"
 
 [weakdeps]
 ClimaAtmos = "b2c96348-7fb7-4fe0-8da9-78d88439e717"
-ClimaCore = "d414da3d-4745-48bb-8d80-42e94e092884"
 Distributed = "8ba89e20-285c-5b6f-9357-94700520ee1b"
 OhMyThreads = "67456a42-1dca-4109-a031-0a68de7e3ad5"
 
 [extensions]
-SwirlLMCloudBenchClimaAtmosExt = ["ClimaAtmos", "ClimaCore"]
+SwirlLMCloudBenchClimaAtmosExt = ["ClimaAtmos"]
 SwirlLMCloudBenchDistributedExt = ["Distributed"]
 SwirlLMCloudBenchOhMyThreadsExt = ["OhMyThreads"]
 
 [compat]
 Artifacts = "1"
 CSV = "0.10"
-ClimaAtmos = "0.41"
-ClimaCore = "0.14"
+ClimaAtmos = "0.42"
 Distributed = "1"
 Downloads = "1.6"
 InlineStrings = "1"

@@ -6,9 +6,8 @@
 #
 # This is NOT part of the default `test/runtests.jl` (heavy ClimaAtmos dependency); CI runs it as a separate gated job.
 
-using Test: @test, @testset
+using Test: Test
 using ClimaAtmos: ClimaAtmos
-using ClimaCore: Fields, Spaces
 using SwirlLMCloudBench: Simulation as S, SwirlLMCloudBench
 
 function write_test_sounding(dir)
@@ -24,8 +23,8 @@ function write_test_sounding(dir)
     return csv
 end
 
-@testset "SwirlLMCloudBenchClimaAtmosExt (registered ClimaAtmos $(SwirlLMCloudBench.climaatmos_pkg_version()))" begin
-    @test Base.get_extension(SwirlLMCloudBench, :SwirlLMCloudBenchClimaAtmosExt) !== nothing
+Test.@testset "SwirlLMCloudBenchClimaAtmosExt (registered ClimaAtmos $(SwirlLMCloudBench.climaatmos_pkg_version()))" begin
+    Test.@test Base.get_extension(SwirlLMCloudBench, :SwirlLMCloudBenchClimaAtmosExt) !== nothing
 
     FT = Float64
     d = mktempdir()
@@ -33,14 +32,14 @@ end
 
     # --- in-memory forcing object ---
     cbf = SwirlLMCloudBench.cloudbench_forcing(snd; FT = FT)
-    @test cbf.nudge
+    Test.@test cbf.nudge
     cbf_nonudge = SwirlLMCloudBench.cloudbench_forcing(snd; FT = FT, nudge = false)
 
     # --- minimal column state Y + params ---
     grid = ClimaAtmos.ColumnGrid(FT; z_elem = 30, z_max = 30000.0, z_stretch = false)
     sp = ClimaAtmos.get_spaces(grid)
     cspace = sp.center_space
-    coords = Fields.coordinate_field(cspace)
+    coords = ClimaAtmos.CC.Fields.coordinate_field(cspace)
     Y = (; c = map(_ -> (; ρ = FT(1)), coords))
     params = ClimaAtmos.ClimaAtmosParameters(FT)
 
@@ -48,22 +47,22 @@ end
     cache = ClimaAtmos.external_forcing_cache(Y, cbf, params, nothing)
     for k in keys(cache)
         k in (:toa_flux, :cos_zenith) && continue   # NaN by default unless set
-        @test all(isfinite, parent(cache[k]))
+        Test.@test all(isfinite, parent(cache[k]))
     end
-    @test all(==(0), parent(cache.ᶜdTdt_fluc))
-    @test all(==(0), parent(cache.ᶜdqtdt_fluc))
-    @test all(>=(0), parent(cache.ᶜinv_τ_scalar))
-    @test any(>(0), parent(cache.ᶜinv_τ_scalar))      # nudging is on aloft
+    Test.@test all(==(0), parent(cache.ᶜdTdt_fluc))
+    Test.@test all(==(0), parent(cache.ᶜdqtdt_fluc))
+    Test.@test all(>=(0), parent(cache.ᶜinv_τ_scalar))
+    Test.@test any(>(0), parent(cache.ᶜinv_τ_scalar))      # nudging is on aloft
 
     # nudge=false zeroes the relaxation timescales
     cache_nn = ClimaAtmos.external_forcing_cache(Y, cbf_nonudge, params, nothing)
-    @test all(==(0), parent(cache_nn.ᶜinv_τ_scalar))
-    @test all(==(0), parent(cache_nn.ᶜinv_τ_wind))
+    Test.@test all(==(0), parent(cache_nn.ᶜinv_τ_scalar))
+    Test.@test all(==(0), parent(cache_nn.ᶜinv_τ_wind))
 
     # --- file path: write GCMForcing-schema NetCDF, read via stock ClimaAtmos.GCMForcing ---
     nc = joinpath(d, "gcm.nc")
     SwirlLMCloudBench.write_clima_gcm_forcing_sounding_netcdf!(nc, snd, "site_test"; rsdt = 400.0, coszen = 0.5)
-    @test isfile(nc)
+    Test.@test isfile(nc)
     gcmf = ClimaAtmos.GCMForcing{FT}(nc, "site_test")
     cache_file = ClimaAtmos.external_forcing_cache(Y, gcmf, params, nothing)
     # The directly-mapped fields agree between the in-memory and file (stock GCMForcing) paths to roundoff.
@@ -77,18 +76,18 @@ end
         :ᶜinv_τ_wind,
         :ᶜinv_τ_scalar,
     )
-        @test parent(cache[k]) ≈ parent(cache_file[k]) rtol = 1e-6
+        Test.@test parent(cache[k]) ≈ parent(cache_file[k]) rtol = 1e-6
     end
     # Subsidence: the in-memory path uses `w` directly (exact); the file path reconstructs w = -wap·α/g via GCMForcing's
     # hydrostatic relation, and the package builds `wap = -ρgw` with g = 9.80665 while ClimaAtmos's `grav` is 9.81 — so
     # the file path recovers w·(9.80665/9.81), a ~3e-4 difference. (Use the in-memory path for the exact subsidence.)
-    @test parent(cache.ᶜls_subsidence) ≈ parent(cache_file.ᶜls_subsidence) rtol = 1e-3
+    Test.@test parent(cache.ᶜls_subsidence) ≈ parent(cache_file.ᶜls_subsidence) rtol = 1e-3
     # (The eddy `fluc` fields also intentionally differ: in-memory is 0; stock GCMForcing reconstructs a vertical-eddy
     #  term from the zero `tntva`/`tnhusva`. Use the in-memory path for faithful CloudBench forcing.)
 
     # --- setup: ICs + forcing in one object, ready for ClimaAtmos.AtmosSimulation ---
     setup = SwirlLMCloudBench.cloudbench_setup(snd; FT = FT)
-    @test ClimaAtmos.Setups.external_forcing(setup, FT) isa typeof(cbf)
+    Test.@test ClimaAtmos.Setups.external_forcing(setup, FT) isa typeof(cbf)
     sc = ClimaAtmos.Setups.surface_condition(setup, params)
-    @test sc.flux_scheme !== nothing && sc.temperature !== nothing
+    Test.@test sc.flux_scheme !== nothing && sc.temperature !== nothing
 end

@@ -158,7 +158,7 @@ end
 
 ### Drive ClimaAtmos with CloudBench forcing (extension)
 
-With **`ClimaAtmos`** (+ `ClimaCore`) in the environment the extension loads automatically. It reuses ClimaAtmos's
+With **`ClimaAtmos`** in the environment the extension loads automatically. It reuses ClimaAtmos's
 GCM-driven (Shen et al. 2022) cache + tendency — the **same** forcing methodology (large-scale advection + subsidence +
 height-dependent relaxation/nudging) the Swirl-LM CloudBench LES were run with — so the ClimaAtmos columns are comparable.
 

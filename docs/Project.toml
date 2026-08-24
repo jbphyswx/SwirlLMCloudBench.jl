@@ -4,3 +4,7 @@ SwirlLMCloudBench = "4f4bb049-d08d-4796-8bfd-29fb09dac0f0"
 
 [compat]
 Documenter = "1"
+
+[sources]
+SwirlLMCloudBench = {path = ".."}
+

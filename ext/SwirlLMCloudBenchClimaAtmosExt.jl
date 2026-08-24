@@ -1,7 +1,7 @@
 """
     SwirlLMCloudBenchClimaAtmosExt
 
-Loads when `ClimaAtmos` (and `ClimaCore`) are available. Drives a single-column ClimaAtmos run with forcing derived
+Loads when `ClimaAtmos` is available. Drives a single-column ClimaAtmos run with forcing derived
 from a CloudBench **`sounding.csv`**, reusing ClimaAtmos's own GCM-driven (Shen et al. 2022) cache + tendency — the
 **same forcing methodology** the Swirl-LM CloudBench LES were run with (large-scale horizontal advection + subsidence +
 height-dependent relaxation/nudging toward the reference profiles). This makes ClimaAtmos columns comparable to CloudBench.
@@ -30,11 +30,9 @@ vertical advection is carried by subsidence (`w`) and the horizontal-advective r
 module SwirlLMCloudBenchClimaAtmosExt
 
 using ClimaAtmos: ClimaAtmos
-using ClimaCore: Fields, Spaces
 using NCDatasets: NCDatasets
 using SwirlLMCloudBench: Simulation as S, SwirlLMCloudBench
 
-const CAS = ClimaAtmos.Setups
 
 """Installed `ClimaAtmos` version (for logs / provenance)."""
 SwirlLMCloudBench.climaatmos_pkg_version() = Base.pkgversion(ClimaAtmos)
@@ -49,7 +47,7 @@ SwirlLMCloudBench.climaatmos_pkg_version() = Base.pkgversion(ClimaAtmos)
 """
     CloudBenchForcing{FT,V}
 
-In-memory ClimaAtmos external forcing built from a CloudBench sounding. Fields are source profiles on the sounding's
+In-memory ClimaAtmos external forcing built from a CloudBench sounding. CA.CC.Fields are source profiles on the sounding's
 `z` grid (interpolated onto the model column at cache time): `dTdt_hadv`/`dqtdt_hadv` (horizontal advective tendencies),
 `subsidence` (vertical velocity `w`), and the nudging targets `T`/`q_t`/`u`/`v`. Scalars `cos_zenith` / `toa_flux` are
 used only by GCM-driven RRTMGP insolation (default `NaN`; set them if you enable that radiation). `nudge` toggles the
@@ -120,7 +118,7 @@ SwirlLMCloudBench.cloudbench_forcing(inst::S.CloudBenchInstance; kwargs...) =
     SwirlLMCloudBench.cloudbench_forcing(S.CloudBenchSimulation(inst); kwargs...)
 
 function ClimaAtmos.external_forcing_cache(Y, forcing::CloudBenchForcing, params, _)
-    FT = Spaces.undertype(axes(Y.c))
+    FT = CA.CC.Spaces.undertype(axes(Y.c))
     ᶜdTdt_fluc = similar(Y.c, FT)
     ᶜdqtdt_fluc = similar(Y.c, FT)
     ᶜdTdt_hadv = similar(Y.c, FT)
@@ -132,10 +130,10 @@ function ClimaAtmos.external_forcing_cache(Y, forcing::CloudBenchForcing, params
     ᶜinv_τ_wind = similar(Y.c, FT)
     ᶜinv_τ_scalar = similar(Y.c, FT)
     ᶜls_subsidence = similar(Y.c, FT)
-    toa_flux = similar(Fields.level(Y.c.ρ, 1), FT)
-    cos_zenith = similar(Fields.level(Y.c.ρ, 1), FT)
+    toa_flux = similar(CA.CC.Fields.level(Y.c.ρ, 1), FT)
+    cos_zenith = similar(CA.CC.Fields.level(Y.c.ρ, 1), FT)
 
-    zc_gcm = Fields.coordinate_field(Y.c).z
+    zc_gcm = CA.CC.Fields.coordinate_field(Y.c).z
     z_src = forcing.z
     setprof!(field, prof) =
         (parent(field) .= ClimaAtmos.interp_vertical_prof(zc_gcm, z_src, prof); nothing)
@@ -184,7 +182,7 @@ end
 # dispatch. We build the identical cache, so delegate to ClimaAtmos's own physics (a dummy ExternalDrivenTVForcing
 # selects that method; its unused path field is irrelevant here).
 function ClimaAtmos.external_forcing_tendency!(Yₜ, Y, p, t, ::CloudBenchForcing)
-    FT = Spaces.undertype(axes(Y.c))
+    FT = CA.CC.Spaces.undertype(axes(Y.c))
     return ClimaAtmos.external_forcing_tendency!(
         Yₜ,
         Y,
@@ -228,7 +226,7 @@ function SwirlLMCloudBench.cloudbench_setup(
     kwargs...,
 )
     forcing = SwirlLMCloudBench.cloudbench_forcing(sounding; FT = FT, kwargs...)
-    profiles = CAS.ColumnProfiles(
+    profiles = ClimaAtmos.Setups.ColumnProfiles(
         FT.(collect(sounding.z)),
         FT.(collect(sounding.temperature)),
         FT.(collect(sounding.u)),
@@ -254,16 +252,16 @@ end
 SwirlLMCloudBench.cloudbench_setup(inst::S.CloudBenchInstance; kwargs...) =
     SwirlLMCloudBench.cloudbench_setup(S.CloudBenchSimulation(inst); kwargs...)
 
-CAS.center_initial_condition(setup::CloudBenchSetup, local_geometry, params) =
-    CAS.column_profiles_ic(setup.profiles, local_geometry)
+ClimaAtmos.Setups.center_initial_condition(setup::CloudBenchSetup, local_geometry, params) =
+    ClimaAtmos.Setups.column_profiles_ic(setup.profiles, local_geometry)
 
-CAS.external_forcing(setup::CloudBenchSetup, ::Type{FT}) where {FT} = setup.forcing
+ClimaAtmos.Setups.external_forcing(setup::CloudBenchSetup, ::Type{FT}) where {FT} = setup.forcing
 
-function CAS.surface_condition(setup::CloudBenchSetup, params)
+function ClimaAtmos.Setups.surface_condition(setup::CloudBenchSetup, params)
     FT = eltype(params)
     return (;
-        flux_scheme = CAS.MoninObukhov(; z0 = FT(1e-4)),
-        temperature = CAS.AnalyticTemperature(Returns(FT(setup.T_sfc))),
+        flux_scheme = ClimaAtmos.Setups.MoninObukhov(; z0 = FT(1e-4)),
+        temperature = ClimaAtmos.Setups.AnalyticTemperature(Returns(FT(setup.T_sfc))),
         overrides = nothing,
     )
 end
