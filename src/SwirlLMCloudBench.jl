@@ -6,7 +6,7 @@ ensemble outputs: catalog constants (cases, months, experiments), configurable l
 and access to published **`sounding.csv`** / **`data.zarr`** via submodule [`Simulation`](@ref).
 
 Registered **dependencies** include `Zarr`, `CSV`, `Downloads`, `NCDatasets`, `JSON`, and `Scratch` (default raw download cache).
-**`SwirlLMCloudBenchClimaAtmosExt`** loads with `ClimaAtmos`; it drives a single-column ClimaAtmos run with forcing from a CloudBench sounding — in-memory via [`cloudbench_forcing`](@ref) / [`cloudbench_setup`](@ref), or a `GCMForcing`-schema NetCDF via [`write_clima_gcm_forcing_sounding_netcdf!`](@ref) — reusing ClimaAtmos's GCM-driven (Shen et al. 2022) physics, the same methodology CloudBench was run with.
+**`SwirlLMCloudBenchClimaAtmosExt`** loads with `ClimaAtmos`; it drives a single-column ClimaAtmos run with forcing from a CloudBench sounding via [`cloudbench_forcing`](@ref) / [`cloudbench_setup`](@ref), composing ClimaAtmos's GCM-driven (Shen et al. 2022) forcing kernels, the same methodology CloudBench was run with.
 **`SwirlLMCloudBenchOhMyThreadsExt`** loads when you use `OhMyThreads` (threaded helpers over collections).
 **`SwirlLMCloudBenchDistributedExt`** loads when you use `Distributed` (parallel raw downloads via [`cloudbench_pmap_download_raw!`](@ref)).
 See `README.md`.
@@ -65,16 +65,8 @@ months_tuple() = Catalog.CLOUDBENCH_MONTHS
 """`Val.(Catalog.EXPERIMENTS)` for dispatch experiments."""
 experiments_val() = Val.(Catalog.EXPERIMENTS)
 
-# --- Optional weak-dep API (methods added when extensions load; MethodError if called without the extra package) ---
-# ClimaAtmos extension (SwirlLMCloudBenchClimaAtmosExt): single-column forcing from a CloudBench sounding,
-# reusing ClimaAtmos's GCM-driven (Shen et al. 2022) cache + tendency.
-function climaatmos_pkg_version end
-function cloudbench_forcing end                       # in-memory CloudBenchForcing (GCM-driven forcing object)
-function cloudbench_setup end                          # CloudBenchSetup (ICs + forcing) for ClimaAtmos.AtmosSimulation
-function write_clima_gcm_forcing_sounding_netcdf! end  # GCMForcing-schema NetCDF from a sounding
-function ensure_clima_gcm_forcing_netcdf! end          # ensure sounding local, then write the GCMForcing NetCDF
-# OhMyThreads / Distributed extensions:
-function cloudbench_tmap end
-function cloudbench_pmap_download_raw! end
+
+# :: Extensions ::
+include("ext/ClimaAtmosExt_bindings.jl")
 
 end

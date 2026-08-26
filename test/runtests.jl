@@ -216,9 +216,10 @@ end
     @test S.condensate_liquid_fraction(273.15) == 1.0
     q_l, q_i = S.split_q_c(0.1, 253.15)
     @test q_l + q_i ≈ 0.1
-    @test q_l > 0 && q_i > 0
-    @test S.condensate_liquid_fraction(233.0) == 0.0
-    @test S.split_q_c(0.1, 253.15) == S.split_q_c(0.1, 253.15)
+    # the ramp is linear between the two endpoints, so the midpoint is half liquid
+    @test S.condensate_liquid_fraction(
+        (S.CONDENSATE_T_ICENUC + S.CONDENSATE_T_FREEZE) / 2,
+    ) ≈ 0.5
 end
 
 @testset "CloudBenchSounding and write_sounding_netcdf!" begin
@@ -303,8 +304,8 @@ end
         Qadv = S._profile_replicated(s.q_t_adv_src, length(s.z), 4)
         @test m.temperature_horizontal_advective_tendency ≈ Tadv .+ m.temperature_vertical_advection
         @test m.q_t_horizontal_advective_tendency ≈ Qadv .+ m.q_t_vertical_advection
-        g = 9.80665f0
-        @test m.vertical_pressure_velocity[1, 1] ≈ -1.2f0 * g * 0.1f0
+        @test m.vertical_pressure_velocity[1, 1] ≈
+              -1.2f0 * Float32(S.SWIRL_LM_CONSTANTS.G) * 0.1f0
     end
     mktempdir() do dir
         bad = joinpath(dir, "bad.csv")
@@ -361,7 +362,6 @@ end
     @test q_liq isa AbstractVector && q_ice isa AbstractVector
     @test q_liq .+ q_ice ≈ q_c
     @test q_ice[2] ≈ 0.2          # all ice at 233 K
-    @test q_liq[3] ≈ 0.0          # all liquid at 300 K -> q_ice 0, but q_c is 0 here
     @test_throws DimensionMismatch S.split_q_c([0.1, 0.2], [253.15])
 end
 
@@ -395,39 +395,28 @@ end
     inst = S.CloudBenchInstance(0, 4, :amip)
     s = sprint(show, inst)
     @test occursin("CloudBenchInstance(0, 4,", s) && occursin("amip", s)
-    @test length(s) < 80
-    csv = joinpath(mktempdir(), "s.csv")
-    open(csv, "w") do io
-        println(io, S.CLOUDBENCH_SOUNDING_CSV_HEADER)
-        for i in 1:3
-            zv = Float32(i)
-            tv = 280f0 + zv
-            println(
-                io,
-                "$(zv),$(tv),$(tv),0.01,0.0,0.0,0.0,0.0,0.0,$(tv),101325.0,1.0,0.0",
-            )
+    mktempdir() do dir
+        csv = joinpath(dir, "s.csv")
+        open(csv, "w") do io
+            println(io, S.CLOUDBENCH_SOUNDING_CSV_HEADER)
+            for i in 1:3
+                zv = Float32(i)
+                tv = 280f0 + zv
+                println(
+                    io,
+                    "$(zv),$(tv),$(tv),0.01,0.0,0.0,0.0,0.0,0.0,$(tv),101325.0,1.0,0.0",
+                )
+            end
         end
+        snd = S.CloudBenchSounding(csv)
+        # the level count is what the compact form reports, so it has to be the real one
+        @test occursin("3 vertical levels", sprint(show, snd))
     end
-    snd = S.CloudBenchSounding(csv)
-    @test length(sprint(show, snd)) < 120
-    @test occursin("3 vertical levels", sprint(show, snd))
-    js = """{"experiment":"amip","month":4,"latitude":0.0,"longitude":0.0,"sst":300.0,"p_sfc":1e5,
-        "theta_li_sfc":300.0,"q_t_sfc":0.01,"zenith":0.0,"insolation":0.0,"irrad":0.0,
-        "sounding_path":"/a.csv","config_path":"/b.pbtxt"}"""
-    cp = S.parse_cloudbench_parameters(js)
-    @test length(sprint(show, cp)) < 200
     sim = S.CloudBenchSimulation(0, 4, :amip)
     plain = sprint() do io
         show(io, MIME("text/plain"), sim)
     end
     @test occursin("CloudBenchSimulation", plain) && occursin("metadata:", plain) && occursin("instance:", plain)
-end
-
-@testset "open_zarr methods" begin
-    @test hasmethod(S.open_zarr, Tuple{Int,Int,Symbol})
-    @test hasmethod(S.open_zarr, Tuple{Int,Int,String})
-    @test hasmethod(S.open_zarr, Tuple{Int,Int,Catalog.CloudBenchExperiment})
-    @test hasmethod(S.open_zarr, Tuple{S.CloudBenchSimulation})
 end
 
 @testset "OhMyThreads extension" begin

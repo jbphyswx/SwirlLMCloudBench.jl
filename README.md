@@ -11,7 +11,7 @@ Use this package to build URLs, download `sounding.csv` / `parameters.json`, ope
 
 **Optional extensions** (loaded when the corresponding package is available):
 
-- **ClimaAtmos** — drive a single-column ClimaAtmos run with forcing from a CloudBench sounding: in-memory `cloudbench_forcing` / `cloudbench_setup`, or a `GCMForcing`-schema NetCDF via `write_clima_gcm_forcing_sounding_netcdf!`, reusing ClimaAtmos's own GCM-driven (Shen et al. 2022) physics — the same forcing methodology CloudBench was run with.
+- **ClimaAtmos** — drive a single-column ClimaAtmos run with forcing from a CloudBench sounding: `cloudbench_forcing` / `cloudbench_setup`, plus `cloudbench_params` for the matching ClimaParams overrides, composing ClimaAtmos's own GCM-driven (Shen et al. 2022) forcing kernels — the same methodology CloudBench was run with.
 - **OhMyThreads** — `cloudbench_tmap` for threaded iteration over collections (e.g. many `CloudBenchSimulation` / `CloudBenchInstance` values).
 - **Distributed** — `cloudbench_pmap_download_raw!` to download many simulations in parallel (`pmap` over `download_cloudbench_raw!`).
 
@@ -33,7 +33,7 @@ Condensed-phase **`q_c`** in CloudBench is described in the upstream README (wit
 |------|------------------|
 | Core (`Catalog`, `Paths`, `Config`, `Artifacts`) | Case indices, months, experiment names, default roots, artifact resolution. |
 | **`Simulation`** | `CloudBenchInstance`, `CloudBenchSimulation` (metadata + output backend), URLs, `download_cloudbench_raw!`, Scratch/env-backed **`Config.raw_download_root()`**, **`open_zarr`** (HTTPS), **`open_zarr_local`** (path + instance, or a simulation with **`LocalCloudBenchMirrorOutput`**), sounding NetCDF helpers, **`split_q_c`**, **`CloudBenchSelection`**. Catalog keys and selection need no network. Mirroring the full Zarr store via `download_cloudbench_raw!(…; zarr=true)` is not supported yet — use **`open_zarr`** for remote lazy access. |
-| **ClimaAtmos extension** | `cloudbench_forcing` / `cloudbench_setup` (in-memory GCM-driven forcing + initial conditions), `write_clima_gcm_forcing_sounding_netcdf!` / `ensure_clima_gcm_forcing_netcdf!` (GCMForcing-schema NetCDF), `climaatmos_pkg_version`. |
+| **ClimaAtmos extension** | `cloudbench_forcing` / `cloudbench_setup` (GCM-driven forcing + initial conditions), `write_cloudbench_forcing_netcdf!` / `read_cloudbench_forcing`, `cloudbench_toml_overrides` / `cloudbench_params`, `cloudbench_callback_kwargs`, `CloudBenchInsolation`, `climaatmos_pkg_version`. |
 | **OhMyThreads extension** | `cloudbench_tmap`. |
 | **Distributed extension** | `cloudbench_pmap_download_raw!` (parallel raw downloads). |
 
@@ -186,16 +186,15 @@ parameters (`gcmdriven_scalar_relaxation_timescale`, `gcmdriven_momentum_relaxat
 `gcmdriven_relaxation_{minimum,maximum}_height`) to the Swirl-LM CloudBench values (`tau_r_tropo`, `tau_r_wind`,
 `z_i`, `z_r`).
 
-**File-based (`GCMForcing` interop):**
+**Through a file:**
 
 ```julia
-nc   = SwirlLMCloudBench.ensure_clima_gcm_forcing_netcdf!("forcing.nc", sim, "site10")
-gcmf = ClimaAtmos.GCMForcing{Float64}(nc, "site10")
+SwirlLMCloudBench.write_cloudbench_forcing_netcdf!("forcing.nc", forcing)
+forcing = SwirlLMCloudBench.read_cloudbench_forcing("forcing.nc")
 ```
 
-The in-memory path is exact; the file path reconstructs subsidence/eddy terms through `GCMForcing`'s schema (small,
-documented differences — see the extension docstring). For a portable NetCDF of the *raw* sounding with **CloudBench**
-names (`z`, `temperature`, `q_t`, …), use `S.write_sounding_netcdf!` / `S.ensure_sounding_netcdf!` instead.
+For a portable NetCDF of the *raw* sounding with **CloudBench** names (`z`, `temperature`, `q_t`, …), use
+`S.write_sounding_netcdf!` / `S.ensure_sounding_netcdf!` instead.
 
 ### Parallel sweeps (threads)
 

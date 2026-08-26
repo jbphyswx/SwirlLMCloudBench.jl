@@ -20,28 +20,21 @@ function write_sounding_netcdf!(
 )
     nz = length(sounding.z)
     nz >= 2 || error("sounding must have at least 2 levels")
+    FT = eltype(sounding.z)
 
     mkpath(dirname(out_path))
     NCDatasets.NCDataset(out_path, "c") do ds
         g = NCDatasets.defGroup(ds, netcdf_group)
         NCDatasets.defDim(g, "z", nz)
 
-        function wvar!(name::AbstractString, data)
-            NCDatasets.defVar(g, name, Float64, ("z",))[:] = data
+        for name in CLOUDBENCH_SOUNDING_COLUMNS
+            units, long_name = getproperty(CLOUDBENCH_SOUNDING_ATTRIBUTES, name)
+            v = NCDatasets.defVar(
+                g, String(name), FT, ("z",);
+                attrib = ["units" => units, "long_name" => long_name],
+            )
+            v[:] = getproperty(sounding, name)
         end
-        wvar!("z", sounding.z)
-        wvar!("theta_li", sounding.theta_li)
-        wvar!("temperature", sounding.temperature)
-        wvar!("q_t", sounding.q_t)
-        wvar!("u", sounding.u)
-        wvar!("v", sounding.v)
-        wvar!("w", sounding.w)
-        wvar!("T_adv_src", sounding.T_adv_src)
-        wvar!("q_t_adv_src", sounding.q_t_adv_src)
-        wvar!("T", sounding.T_column)
-        wvar!("p", sounding.p)
-        wvar!("rho", sounding.rho)
-        wvar!("cld_frac", sounding.cld_frac)
     end
     _Pkg.cloudbench_info("Wrote CloudBench sounding-based NetCDF"; verbose, out_path, netcdf_group)
     return out_path

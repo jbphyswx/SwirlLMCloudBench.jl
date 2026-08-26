@@ -28,6 +28,58 @@ const CLOUDBENCH_SOUNDING_CSV_HEADER =
     "z,theta_li,temperature,q_t,u,v,w,T_adv_src,q_t_adv_src,T,p,rho,cld_frac"
 
 """
+`units` and `long_name` of each sounding column.
+
+`T` is the GCM temperature: `gcm_column.py` maps it to `gcm_T`, the profile the forcing advects and relaxes toward,
+while `temperature` initializes the reference state. The two are equal in the published soundings.
+"""
+const CLOUDBENCH_SOUNDING_ATTRIBUTES = (;
+    z = ("m", "Height above the surface"),
+    theta_li = ("K", "Liquid-ice potential temperature"),
+    temperature = ("K", "Air temperature used to initialize the reference state"),
+    q_t = ("kg kg^-1", "Total water specific humidity"),
+    u = ("m s^-1", "Zonal velocity"),
+    v = ("m s^-1", "Meridional velocity"),
+    w = ("m s^-1", "Vertical velocity"),
+    T_adv_src = ("K s^-1", "GCM total advective tendency of temperature"),
+    q_t_adv_src = ("kg kg^-1 s^-1", "GCM total advective tendency of total water specific humidity"),
+    T = ("K", "GCM air temperature"),
+    p = ("Pa", "Pressure"),
+    rho = ("kg m^-3", "Air density"),
+    cld_frac = ("1", "Cloud fraction"),
+)
+
+"""Swirl-LM's physical constants, verbatim from `swirl_lm/physics/constants.py`."""
+const SWIRL_LM_CONSTANTS = (;
+    # Universal gas constant, in units of J/mol/K.
+    R_UNIVERSAL = 8.3145,
+
+    # The precomputed gas constant for dry air, in units of J/kg/K.
+    R_D = 286.69,
+
+    # The gravitational acceleration constant, in units of N/kg.
+    G = 9.81,
+
+    # The heat capacity ratio of dry air, dimensionless.
+    GAMMA = 1.4,
+
+    # The constant pressure heat capacity of dry air, in units of J/kg/K.
+    CP = 1.4 * 286.69 / (1.4 - 1.0),
+
+    # The constant volume heat capacity of dry air, in units of J/kg/K.
+    CV = (1.4 * 286.69 / (1.4 - 1.0)) - 286.69,
+
+    # The molecular mass of dry air (kg/mol).
+    DRY_AIR_MOL_MASS = 0.0289647,
+
+    # The molecular mass of water (kg/mol).
+    WATER_MOL_MASS = 0.0180153,
+
+    # Avogadro's number.
+    AVOGADRO = 6.022e23,
+)
+
+"""
     CloudBenchSounding{FT<:AbstractFloat,V<:AbstractVector{FT}}
 
 Parsed snapshot of a CloudBench **`sounding.csv`** row table (one height per row). Published bucket files such as
@@ -264,14 +316,15 @@ function cloudbench_sounding_zt_matrices(sounding::CloudBenchSounding, nt::Int)
     nz = length(z)
     nz < 2 && error("sounding must have at least 2 levels")
     # replicated (z, time) matrices — local names follow `sounding.csv` / `CLOUDBENCH_SOUNDING_COLUMNS`, not NetCDF short names
-    temperature_zt = _profile_replicated(sounding.temperature, nz, nt)
+    temperature_zt = _profile_replicated(sounding.T, nz, nt)
     q_t_zt = _profile_replicated(sounding.q_t, nz, nt)
     u_zt = _profile_replicated(sounding.u, nz, nt)
     v_zt = _profile_replicated(sounding.v, nz, nt)
     rho_zt = _profile_replicated(sounding.rho, nz, nt)
     w_zt = _profile_replicated(sounding.w, nz, nt)
     # alias the stored profiles directly (read-only here; the upwind/broadcast ops below work on any AbstractVector)
-    Tvec = sounding.temperature
+    # the GCM temperature: `gcm_column.py` maps the `T` column to `gcm_T`, which is what the forcing advects
+    Tvec = sounding.T
     qvec = sounding.q_t
     wvec = sounding.w
     tadv = sounding.T_adv_src
@@ -290,8 +343,7 @@ function cloudbench_sounding_zt_matrices(sounding::CloudBenchSounding, nt::Int)
     q_t_vertical_advection_zt = _profile_replicated(vadv_q, nz, nt)
     temperature_hadv_zt = _profile_replicated(T_hadv_profile, nz, nt)
     q_t_hadv_zt = _profile_replicated(q_t_hadv_profile, nz, nt)
-    g = T(9.80665)
-    vertical_pressure_velocity_profile = @. -sounding.rho * g * wvec
+    vertical_pressure_velocity_profile = @. -sounding.rho * T(SWIRL_LM_CONSTANTS.G) * wvec
     vertical_pressure_velocity_zt = _profile_replicated(vertical_pressure_velocity_profile, nz, nt)
     return (;
         temperature = temperature_zt,
