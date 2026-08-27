@@ -6,7 +6,6 @@ ensemble outputs: catalog constants (cases, months, experiments), configurable l
 and access to published **`sounding.csv`** / **`data.zarr`** via submodule [`Simulation`](@ref).
 
 Registered **dependencies** include `Zarr`, `CSV`, `Downloads`, `NCDatasets`, `JSON`, and `Scratch` (default raw download cache).
-**`SwirlLMCloudBenchClimaAtmosExt`** loads with `ClimaAtmos`; it drives a single-column ClimaAtmos run with forcing from a CloudBench sounding via [`cloudbench_forcing`](@ref) / [`cloudbench_setup`](@ref), composing ClimaAtmos's GCM-driven (Shen et al. 2022) forcing kernels, the same methodology CloudBench was run with.
 **`SwirlLMCloudBenchOhMyThreadsExt`** loads when you use `OhMyThreads` (threaded helpers over collections).
 **`SwirlLMCloudBenchDistributedExt`** loads when you use `Distributed` (parallel raw downloads via [`cloudbench_pmap_download_raw!`](@ref)).
 See `README.md`.
@@ -22,7 +21,7 @@ See `README.md`.
   [`Simulation.split_q_c`](@ref) (Swirl-LM liquid fraction on `q_c`), lazy [`Simulation.CloudBenchSelection`](@ref).
 
 CloudBench labels simulations with integer **`site_id`** in `0:499`, months `{1,4,7,10}`, and experiment segments per
-the upstream README. With `ClimaAtmos` loaded, this module also exposes Clima-oriented helpers (e.g. [`cloudbench_forcing`](@ref), [`cloudbench_setup`](@ref)).
+the upstream README.
 
 # Environment variables
 
@@ -66,7 +65,13 @@ months_tuple() = Catalog.CLOUDBENCH_MONTHS
 experiments_val() = Val.(Catalog.EXPERIMENTS)
 
 
+
+
 # :: Extensions ::
+# OhMyThreads / Distributed extensions:
+function cloudbench_tmap end
+function cloudbench_pmap_download_raw! end
+
 include("ext/ClimaAtmosExt_bindings.jl")
 
 end

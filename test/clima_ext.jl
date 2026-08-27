@@ -1,8 +1,6 @@
 # Verifies SwirlLMCloudBenchClimaAtmosExt against the REGISTERED ClimaAtmos stack.
 #
-# Run:
-#   julia --project=test/environments/clima -e 'import Pkg; Pkg.instantiate()'
-#   julia --project=test/environments/clima test/clima_ext.jl
+# Run with `test/environments/clima` environment.
 #
 # This is NOT part of the default `test/runtests.jl` (heavy ClimaAtmos dependency); CI runs it as a separate gated job.
 
@@ -36,11 +34,11 @@ Test.@testset "SwirlLMCloudBenchClimaAtmosExt (registered ClimaAtmos $(SwirlLMCl
         T_sfc, coszen, rsdt = FT(301.0), FT(0.5), FT(400.0)
 
         # --- in-memory forcing object ---
-        cbf = SwirlLMCloudBench.cloudbench_forcing(
+        cbf = SwirlLMCloudBench.ClimaAtmosSwirlLMCloudBenchForcing(
             snd; FT = FT, cos_zenith = coszen, toa_flux = rsdt,
         )
         Test.@test cbf.nudge
-        cbf_nonudge = SwirlLMCloudBench.cloudbench_forcing(
+        cbf_nonudge = SwirlLMCloudBench.ClimaAtmosSwirlLMCloudBenchForcing(
             snd; FT = FT, cos_zenith = coszen, toa_flux = rsdt, nudge = false,
         )
 
@@ -67,9 +65,9 @@ Test.@testset "SwirlLMCloudBenchClimaAtmosExt (registered ClimaAtmos $(SwirlLMCl
         Test.@test all(==(0), parent(cache_nn.ᶜinv_τ_wind))
 
         # --- the forcing round-trips through a file, in this package's own type and format ---
-        fnc = joinpath(dir, "cloudbench_forcing.nc")
-        SwirlLMCloudBench.write_cloudbench_forcing_netcdf!(fnc, cbf)
-        cbf_read = SwirlLMCloudBench.read_cloudbench_forcing(fnc; FT = FT)
+        fnc = joinpath(dir, "ClimaAtmosSwirlLMCloudBenchForcing.nc")
+        SwirlLMCloudBench.write_ClimaAtmosSwirlLMCloudBenchForcing_netcdf!(fnc, cbf)
+        cbf_read = SwirlLMCloudBench.read_ClimaAtmosSwirlLMCloudBenchForcing(fnc; FT = FT)
         for name in fieldnames(typeof(cbf))
             Test.@test getfield(cbf_read, name) == getfield(cbf, name)
         end
@@ -87,7 +85,7 @@ Test.@testset "SwirlLMCloudBenchClimaAtmosExt (registered ClimaAtmos $(SwirlLMCl
         )
 
         # --- setup: ICs + forcing in one object, ready for ClimaAtmos.AtmosSimulation ---
-        setup = SwirlLMCloudBench.cloudbench_setup(
+        setup = SwirlLMCloudBench.ClimaAtmosSwirlLMCloudBenchSetup(
             snd; FT = FT, surface_temperature = T_sfc, cos_zenith = coszen, toa_flux = rsdt,
         )
         Test.@test ClimaAtmos.Setups.external_forcing(setup, FT) isa typeof(cbf)
@@ -97,6 +95,22 @@ Test.@testset "SwirlLMCloudBenchClimaAtmosExt (registered ClimaAtmos $(SwirlLMCl
         Test.@test sc.temperature.f(nothing) == T_sfc
         # insolation is this package's own model, reading the case's values from the forcing cache
         ext = Base.get_extension(SwirlLMCloudBench, :SwirlLMCloudBenchClimaAtmosExt)
-        Test.@test ClimaAtmos.Setups.insolation_model(setup) isa ext.CloudBenchInsolation
+        Test.@test ClimaAtmos.Setups.insolation_model(setup) isa
+                   ext.ClimaAtmosSwirlLMCloudBenchInsolation
+
+        Y = ClimaAtmos.Setups.initial_state(
+            setup, params, ClimaAtmos.AtmosModel(), cspace, sp.face_space,
+        )
+        Test.@test all(isfinite, parent(Y.c))
+        Test.@test all(isfinite, parent(Y.f))
+        # the state carries the sounding, so the column spans the sounding's own range
+        zc = vec(Array(parent(ClimaAtmos.CC.Fields.coordinate_field(cspace).z)))
+        T_col = vec(Array(parent(ClimaAtmos.CC.Fields.level(Y.c.ρ, 1))))
+        Test.@test length(T_col) == 1
+        Test.@test minimum(zc) > 0 && maximum(zc) < 30000
+        ρ = vec(Array(parent(Y.c.ρ)))
+        Test.@test all(>(0), ρ)
+        # air thins upwards, so the lowest cell is denser than the highest
+        Test.@test first(ρ) > last(ρ)
     end
 end

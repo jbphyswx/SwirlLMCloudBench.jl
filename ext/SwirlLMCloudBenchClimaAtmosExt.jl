@@ -6,11 +6,11 @@ from a CloudBench **`sounding.csv`**, reusing ClimaAtmos's own GCM-driven (Shen 
 **same forcing methodology** the Swirl-LM CloudBench LES were run with (large-scale horizontal advection + subsidence +
 height-dependent relaxation/nudging toward the reference profiles). This makes ClimaAtmos columns comparable to CloudBench.
 
-[`SwirlLMCloudBench.cloudbench_forcing`](@ref) builds a `CloudBenchForcing` from the sounding, and
-[`SwirlLMCloudBench.cloudbench_setup`](@ref) a `CloudBenchSetup` (initial conditions **and** forcing from that same
+[`SwirlLMCloudBench.ClimaAtmosSwirlLMCloudBenchForcing`](@ref) builds a `CloudBenchForcing` from the sounding, and
+[`SwirlLMCloudBench.ClimaAtmosSwirlLMCloudBenchSetup`](@ref) a `ClimaAtmosSwirlLMCloudBenchSetup` (initial conditions **and** forcing from that same
 sounding) to pass straight to `ClimaAtmos.AtmosSimulation{FT}(; setup = …, grid, params, …)`.
-[`SwirlLMCloudBench.write_cloudbench_forcing_netcdf!`](@ref) and
-[`SwirlLMCloudBench.read_cloudbench_forcing`](@ref) carry a forcing through a file.
+[`SwirlLMCloudBench.write_ClimaAtmosSwirlLMCloudBenchForcing_netcdf!`](@ref) and
+[`SwirlLMCloudBench.read_ClimaAtmosSwirlLMCloudBenchForcing`](@ref) carry a forcing through a file.
 
 # Nudging / comparability
 
@@ -36,11 +36,11 @@ SwirlLMCloudBench.climaatmos_pkg_version() = Base.pkgversion(ClimaAtmos)
 _toml_float(x) = Dict{String, Union{Float64,String}}("value" => Float64(x), "type" => "float")
 
 """
-    cloudbench_toml_overrides(experiment = :amip)
+    ClimaAtmos_SwirlLMCloudBench_toml_overrides(experiment = :amip)
 
 ClimaParams overrides putting a column on CloudBench's configuration, in the parsed-TOML shape
 `create_toml_dict` takes:
-`ClimaParams.create_toml_dict(FT; override_file = cloudbench_toml_overrides(:amip_4xco2))`.
+`ClimaParams.create_toml_dict(FT; override_file = ClimaAtmos_SwirlLMCloudBench_toml_overrides(:amip_4xco2))`.
 
 `experiment` selects that scenario's CO₂; the rest is common to the ensemble.
 
@@ -51,7 +51,7 @@ What CloudBench fixes and this cannot: its cloud optics — an effective radius 
 liquid water content, with asymmetry factor 0.8, where ClimaAtmos assumes a constant radius and has no asymmetry
 entry. `docs/cloudbench_contract.md` section 6 records it.
 """
-function cloudbench_toml_overrides(experiment = :amip)
+function SwirlLMCloudBench.ClimaAtmos_SwirlLMCloudBench_toml_overrides(experiment = :amip)
     c = S.SWIRL_LM_CONSTANTS
     r = S.CLOUDBENCH_RELAXATION
     return Dict{String, Dict{String,Union{Float64,String}}}(
@@ -81,28 +81,28 @@ function cloudbench_toml_overrides(experiment = :amip)
 end
 
 """
-    cloudbench_params(FT = Float64, experiment = :amip; overrides = cloudbench_toml_overrides(experiment))
+    ClimaAtmos_SwirlLMCloudBench_params(FT = Float64, experiment = :amip; overrides = ClimaAtmos_SwirlLMCloudBench_toml_overrides(experiment))
 
-`ClimaAtmos.ClimaAtmosParameters` built with [`cloudbench_toml_overrides`](@ref) applied.
+`ClimaAtmos.ClimaAtmosParameters` built with [`ClimaAtmos_SwirlLMCloudBench_toml_overrides`](@ref) applied.
 """
-cloudbench_params(
+SwirlLMCloudBench.ClimaAtmos_SwirlLMCloudBench_params(
     ::Type{FT} = Float64,
     experiment = :amip;
-    overrides = cloudbench_toml_overrides(experiment),
+    overrides = SwirlLMCloudBench.ClimaAtmos_SwirlLMCloudBench_toml_overrides(experiment),
 ) where {FT<:AbstractFloat} = ClimaAtmos.ClimaAtmosParameters(
     ClimaAtmos.CP.create_toml_dict(FT; override_file = overrides),
 )
 
 """
-    cloudbench_params(sim_or_instance, FT = Float64; kwargs...)
+    ClimaAtmos_SwirlLMCloudBench_params(sim_or_instance, FT = Float64; kwargs...)
 
 Parameters for a case, taking the CO₂ from that case's own experiment.
 """
-cloudbench_params(inst::S.CloudBenchInstance, ::Type{FT} = Float64; kwargs...) where {FT<:AbstractFloat} =
-    cloudbench_params(FT, Symbol(inst.experiment); kwargs...)
+SwirlLMCloudBench.ClimaAtmos_SwirlLMCloudBench_params(inst::S.CloudBenchInstance, ::Type{FT} = Float64; kwargs...) where {FT<:AbstractFloat} =
+    SwirlLMCloudBench.ClimaAtmos_SwirlLMCloudBench_params(FT, Symbol(inst.experiment); kwargs...)
 
-cloudbench_params(sim::S.CloudBenchSimulation, ::Type{FT} = Float64; kwargs...) where {FT<:AbstractFloat} =
-    cloudbench_params(S.cloudbench_instance(sim), FT; kwargs...)
+SwirlLMCloudBench.ClimaAtmos_SwirlLMCloudBench_params(sim::S.CloudBenchSimulation, ::Type{FT} = Float64; kwargs...) where {FT<:AbstractFloat} =
+    SwirlLMCloudBench.ClimaAtmos_SwirlLMCloudBench_params(S.cloudbench_instance(sim), FT; kwargs...)
 
 # ===========================================================================
 # CloudBenchForcing — in-memory GCM-driven forcing built from a sounding.
@@ -111,7 +111,7 @@ cloudbench_params(sim::S.CloudBenchSimulation, ::Type{FT} = Float64; kwargs...) 
 # to ClimaAtmos's (cache-only) GCM/reanalysis tendency.
 # ===========================================================================
 
-abstract type AbstractCloudBenchForcing end
+abstract type AbstractClimaAtmosCloudBenchForcing end
 
 """
     CloudBenchForcing{FT,V}
@@ -122,9 +122,9 @@ In-memory ClimaAtmos external forcing built from a CloudBench sounding. Fields a
 case's diurnally averaged GCM values, used by [`CloudBenchInsolation`](@ref). `nudge` toggles the Shen-style
 relaxation.
 
-Build with [`SwirlLMCloudBench.cloudbench_forcing`](@ref).
+Build with [`SwirlLMCloudBench.ClimaAtmosSwirlLMCloudBenchForcing`](@ref).
 """
-struct CloudBenchForcing{FT <: AbstractFloat, V <: AbstractVector{FT}} <: AbstractCloudBenchForcing
+struct ClimaAtmosSwirlLMCloudBenchForcing{FT <: AbstractFloat, V <: AbstractVector{FT}} <: AbstractClimaAtmosCloudBenchForcing
     z::V
     dTdt_hadv::V
     dqtdt_hadv::V
@@ -139,8 +139,8 @@ struct CloudBenchForcing{FT <: AbstractFloat, V <: AbstractVector{FT}} <: Abstra
 end
 
 """
-    cloudbench_forcing(sounding; cos_zenith, toa_flux, nudge=true, FT=Float64) -> CloudBenchForcing
-    cloudbench_forcing(sim_or_instance; root=nothing, verbose=nothing, kwargs...) -> CloudBenchForcing
+    ClimaAtmosSwirlLMCloudBenchForcing(sounding; cos_zenith, toa_flux, nudge=true, FT=Float64) -> CloudBenchForcing
+    ClimaAtmosSwirlLMCloudBenchForcing(sim_or_instance; root=nothing, verbose=nothing, kwargs...) -> CloudBenchForcing
 
 In-memory GCM-driven forcing from a [`Simulation.CloudBenchSounding`](@ref) (or a simulation/instance, whose files are
 ensured local first). See the module docstring for the forcing methodology and `nudge`.
@@ -148,7 +148,7 @@ ensured local first). See the module docstring for the forcing methodology and `
 [`CloudBenchInsolation`](@ref) reads `cos_zenith` and `toa_flux`, so a bare sounding — which carries neither — must be
 given both. From a simulation or instance they default to that case's `parameters.json`.
 """
-function SwirlLMCloudBench.cloudbench_forcing(
+function SwirlLMCloudBench.ClimaAtmosSwirlLMCloudBenchForcing(
     sounding::S.CloudBenchSounding;
     cos_zenith::Real,
     toa_flux::Real,
@@ -157,7 +157,7 @@ function SwirlLMCloudBench.cloudbench_forcing(
 )
     m = S.cloudbench_sounding_zt_matrices(sounding, 1)   # steady sounding → single time column
     prof(x) = FT.(x[:, 1])
-    return CloudBenchForcing{FT,Vector{FT}}(
+    return ClimaAtmosSwirlLMCloudBenchForcing{FT,Vector{FT}}(
         FT.(collect(sounding.z)),
         prof(m.temperature_horizontal_advective_tendency),
         prof(m.q_t_horizontal_advective_tendency),
@@ -173,11 +173,11 @@ function SwirlLMCloudBench.cloudbench_forcing(
 end
 
 """Profile fields of a [`CloudBenchForcing`](@ref), in the order they are stored."""
-const CLOUDBENCH_FORCING_PROFILES =
+const ClimaAtmosCloudBenchForcingProfiles =
     (:z, :dTdt_hadv, :dqtdt_hadv, :subsidence, :T, :q_t, :u, :v)
 
-"""`units` and `long_name` of each field in [`CLOUDBENCH_FORCING_PROFILES`](@ref)."""
-const CLOUDBENCH_FORCING_ATTRIBUTES = Dict(
+"""`units` and `long_name` of each field in [`ClimaAtmosCloudBenchForcingProfiles`](@ref)."""
+const ClimaAtmosCloudBenchForcingAttributes = Dict(
     :z => ("m", "Height above the surface"),
     :dTdt_hadv => ("K s^-1", "Horizontal advective tendency of temperature"),
     :dqtdt_hadv =>
@@ -189,23 +189,25 @@ const CLOUDBENCH_FORCING_ATTRIBUTES = Dict(
     :v => ("m s^-1", "GCM meridional velocity, the relaxation target"),
 )
 
+
+
 """
-    write_cloudbench_forcing_netcdf!(path, forcing) -> path
+    write_ClimaAtmosSwirlLMCloudBenchForcing_netcdf!(path, forcing) -> path
 
 Write a [`CloudBenchForcing`](@ref) to NetCDF, such that
-[`SwirlLMCloudBench.read_cloudbench_forcing`](@ref) returns an equal object.
+[`SwirlLMCloudBench.read_ClimaAtmosSwirlLMCloudBenchForcing`](@ref) returns an equal object.
 """
-function SwirlLMCloudBench.write_cloudbench_forcing_netcdf!(
+function SwirlLMCloudBench.write_ClimaAtmosSwirlLMCloudBenchForcing_netcdf!(
     path::AbstractString,
-    forcing::CloudBenchForcing;
+    forcing::ClimaAtmosSwirlLMCloudBenchForcing;
     verbose::Union{Nothing,Bool} = nothing,
 )
     FT = eltype(forcing.z)
     mkpath(dirname(abspath(path)))
     NCDatasets.NCDataset(path, "c") do ds
         NCDatasets.defDim(ds, "z", length(forcing.z))
-        for name in CLOUDBENCH_FORCING_PROFILES
-            units, long_name = CLOUDBENCH_FORCING_ATTRIBUTES[name]
+        for name in ClimaAtmosCloudBenchForcingProfiles
+            units, long_name = ClimaAtmosCloudBenchForcingAttributes[name]
             v = NCDatasets.defVar(
                 ds, String(name), FT, ("z",);
                 attrib = ["units" => units, "long_name" => long_name],
@@ -221,20 +223,20 @@ function SwirlLMCloudBench.write_cloudbench_forcing_netcdf!(
 end
 
 """
-    read_cloudbench_forcing(path; FT = Float64) -> CloudBenchForcing
+    read_ClimaAtmosSwirlLMCloudBenchForcing(path; FT = Float64) -> CloudBenchForcing
 
-Read a forcing written by [`SwirlLMCloudBench.write_cloudbench_forcing_netcdf!`](@ref).
+Read a forcing written by [`SwirlLMCloudBench.write_ClimaAtmosSwirlLMCloudBenchForcing_netcdf!`](@ref).
 """
-function SwirlLMCloudBench.read_cloudbench_forcing(
+function SwirlLMCloudBench.read_ClimaAtmosSwirlLMCloudBenchForcing(
     path::AbstractString;
     FT::Type{<:AbstractFloat} = Float64,
 )
     isfile(path) || error("no CloudBench forcing at $(path)")
     return NCDatasets.NCDataset(path, "r") do ds
-        profiles = map(CLOUDBENCH_FORCING_PROFILES) do name
+        profiles = map(ClimaAtmosCloudBenchForcingProfiles) do name
             FT.(collect(ds[String(name)][:]))
         end
-        CloudBenchForcing{FT,Vector{FT}}(
+        ClimaAtmosSwirlLMCloudBenchForcing{FT,Vector{FT}}(
             profiles...,
             FT(ds.attrib["cos_zenith"]),
             FT(ds.attrib["toa_flux"]),
@@ -243,7 +245,7 @@ function SwirlLMCloudBench.read_cloudbench_forcing(
     end
 end
 
-function SwirlLMCloudBench.cloudbench_forcing(
+function SwirlLMCloudBench.ClimaAtmosSwirlLMCloudBenchForcing(
     sim::S.CloudBenchSimulation;
     root::Union{Nothing,AbstractString} = nothing,
     verbose::Union{Nothing,Bool} = nothing,
@@ -258,7 +260,7 @@ function SwirlLMCloudBench.cloudbench_forcing(
         verbose = verbose,
         sounding_eltype = FT,
     ).metadata
-    return SwirlLMCloudBench.cloudbench_forcing(
+    return SwirlLMCloudBench.ClimaAtmosSwirlLMCloudBenchForcing(
         meta.sounding;
         nudge,
         cos_zenith = something(cos_zenith, meta.parameters.zenith),
@@ -267,10 +269,10 @@ function SwirlLMCloudBench.cloudbench_forcing(
     )
 end
 
-SwirlLMCloudBench.cloudbench_forcing(inst::S.CloudBenchInstance; kwargs...) =
-    SwirlLMCloudBench.cloudbench_forcing(S.CloudBenchSimulation(inst); kwargs...)
+SwirlLMCloudBench.ClimaAtmosSwirlLMCloudBenchForcing(inst::S.CloudBenchInstance; kwargs...) =
+    SwirlLMCloudBench.ClimaAtmosSwirlLMCloudBenchForcing(S.CloudBenchSimulation(inst); kwargs...)
 
-function ClimaAtmos.external_forcing_cache(Y, forcing::CloudBenchForcing, params, _)
+function ClimaAtmos.external_forcing_cache(Y, forcing::ClimaAtmosSwirlLMCloudBenchForcing, params, _)
     FT = ClimaAtmos.CC.Spaces.undertype(axes(Y.c))
     ᶜdTdt_hadv = similar(Y.c, FT)
     ᶜdqtdt_hadv = similar(Y.c, FT)
@@ -326,7 +328,7 @@ end
 # Composed from ClimaAtmos's shared forcing kernels, which are the single implementation of each term. Borrowing another
 # forcing type for dispatch is what broke this before: `ExternalDrivenTVForcing` is parameterised on a ColumnDataset and
 # its tendency destructures `forcing_terms`/`term_caches`, neither of which the cache above has.
-function ClimaAtmos.external_forcing_tendency!(Yₜ, Y, p, t, ::CloudBenchForcing)
+function ClimaAtmos.external_forcing_tendency!(Yₜ, Y, p, t, ::ClimaAtmosSwirlLMCloudBenchForcing)
     (;
         ᶜdTdt_hadv,
         ᶜdqtdt_hadv,
@@ -353,19 +355,19 @@ function ClimaAtmos.external_forcing_tendency!(Yₜ, Y, p, t, ::CloudBenchForcin
 end
 
 # ===========================================================================
-# CloudBenchSetup — turnkey single-column setup (ICs + surface + forcing from one sounding).
-# Pass directly: ClimaAtmos.AtmosSimulation{FT}(; setup = cloudbench_setup(sounding), grid, params, …).
+# ClimaAtmosSwirlLMCloudBenchSetup — turnkey single-column setup (ICs + surface + forcing from one sounding).
+# Pass directly: ClimaAtmos.AtmosSimulation{FT}(; setup = ClimaAtmosSwirlLMCloudBenchSetup(sounding), grid, params, …).
 # Mirrors ClimaAtmos.Setups.GCMDriven but in-memory.
 # ===========================================================================
 
 """
-    CloudBenchSetup
+    ClimaAtmosSwirlLMCloudBenchSetup
 
 A ClimaAtmos `Setups`-compatible single-column setup whose **initial conditions** (T, u, v, q_t, ρ) and **external
-forcing** both come from one CloudBench sounding. Build with [`SwirlLMCloudBench.cloudbench_setup`](@ref) and pass as
+forcing** both come from one CloudBench sounding. Build with [`SwirlLMCloudBench.ClimaAtmosSwirlLMCloudBenchSetup`](@ref) and pass as
 `ClimaAtmos.AtmosSimulation{FT}(; setup = …, grid, params)`.
 """
-struct CloudBenchSetup{P,F<:CloudBenchForcing,FT}
+struct ClimaAtmosSwirlLMCloudBenchSetup{P,F<:ClimaAtmosSwirlLMCloudBenchForcing, FT}
     profiles::P
     forcing::F
     T_sfc::FT
@@ -373,11 +375,11 @@ struct CloudBenchSetup{P,F<:CloudBenchForcing,FT}
 end
 
 """
-    cloudbench_setup(sounding; surface_temperature, z0=1e-4, FT=Float64, kwargs...) -> CloudBenchSetup
-    cloudbench_setup(sim_or_instance; root=nothing, verbose=nothing, kwargs...) -> CloudBenchSetup
+    ClimaAtmosSwirlLMCloudBenchSetup(sounding; surface_temperature, z0=1e-4, FT=Float64, kwargs...) -> ClimaAtmosSwirlLMCloudBenchSetup
+    ClimaAtmosSwirlLMCloudBenchSetup(sim_or_instance; root=nothing, verbose=nothing, kwargs...) -> ClimaAtmosSwirlLMCloudBenchSetup
 
-Build a [`CloudBenchSetup`](@ref) (initial conditions + forcing) from a sounding/simulation. Remaining `kwargs`
-(`nudge`, `cos_zenith`, `toa_flux`) are forwarded to [`SwirlLMCloudBench.cloudbench_forcing`](@ref).
+Build a [`ClimaAtmosSwirlLMCloudBenchSetup`](@ref) (initial conditions + forcing) from a sounding/simulation. Remaining `kwargs`
+(`nudge`, `cos_zenith`, `toa_flux`) are forwarded to [`SwirlLMCloudBench.ClimaAtmosSwirlLMCloudBenchForcing`](@ref).
 
 `surface_temperature` is the **sea surface** temperature. Given a simulation or instance it comes from that case's
 `parameters.json` `sst`, along with `zenith` and `insolation`; a bare sounding carries none of the three, so from one
@@ -387,14 +389,14 @@ temperature of the *air* at the first level, which is a different quantity and i
 `z0` is the momentum roughness length [m]; the default is open ocean. CloudBench spans land and ice sites too, so a
 site that is not ocean needs its own.
 """
-function SwirlLMCloudBench.cloudbench_setup(
+function SwirlLMCloudBench.ClimaAtmosSwirlLMCloudBenchSetup(
     sounding::S.CloudBenchSounding;
     surface_temperature::Real,
     z0::Real = 1e-4,
     FT::Type{<:AbstractFloat} = Float64,
     kwargs...,
 )
-    forcing = SwirlLMCloudBench.cloudbench_forcing(sounding; FT = FT, kwargs...)
+    forcing = SwirlLMCloudBench.ClimaAtmosSwirlLMCloudBenchForcing(sounding; FT = FT, kwargs...)
     profiles = ClimaAtmos.Setups.ColumnProfiles(
         FT.(collect(sounding.z)),
         FT.(collect(sounding.temperature)),
@@ -403,12 +405,12 @@ function SwirlLMCloudBench.cloudbench_setup(
         FT.(collect(sounding.q_t)),
         FT.(collect(sounding.rho)),
     )
-    return CloudBenchSetup(profiles, forcing, FT(surface_temperature), FT(z0))
+    return ClimaAtmosSwirlLMCloudBenchSetup(profiles, forcing, FT(surface_temperature), FT(z0))
 end
 
 # The case's own `parameters.json` carries `sst`, `zenith` and `insolation`; they are the surface temperature and the
 # insolation this site was run with, so they are the defaults rather than something the caller has to look up.
-function SwirlLMCloudBench.cloudbench_setup(
+function SwirlLMCloudBench.ClimaAtmosSwirlLMCloudBenchSetup(
     sim::S.CloudBenchSimulation;
     root::Union{Nothing,AbstractString} = nothing,
     verbose::Union{Nothing,Bool} = nothing,
@@ -425,7 +427,7 @@ function SwirlLMCloudBench.cloudbench_setup(
         sounding_eltype = FT,
     ).metadata
     prm = meta.parameters
-    return SwirlLMCloudBench.cloudbench_setup(
+    return SwirlLMCloudBench.ClimaAtmosSwirlLMCloudBenchSetup(
         meta.sounding;
         FT = FT,
         surface_temperature = something(surface_temperature, prm.sst),
@@ -435,13 +437,13 @@ function SwirlLMCloudBench.cloudbench_setup(
     )
 end
 
-SwirlLMCloudBench.cloudbench_setup(inst::S.CloudBenchInstance; kwargs...) =
-    SwirlLMCloudBench.cloudbench_setup(S.CloudBenchSimulation(inst); kwargs...)
+SwirlLMCloudBench.ClimaAtmosSwirlLMCloudBenchSetup(inst::S.CloudBenchInstance; kwargs...) =
+    SwirlLMCloudBench.ClimaAtmosSwirlLMCloudBenchSetup(S.CloudBenchSimulation(inst); kwargs...)
 
-ClimaAtmos.Setups.center_initial_condition(setup::CloudBenchSetup, local_geometry, params) =
+ClimaAtmos.Setups.center_initial_condition(setup::ClimaAtmosSwirlLMCloudBenchSetup, local_geometry, params) =
     ClimaAtmos.Setups.column_profiles_ic(setup.profiles, local_geometry)
 
-ClimaAtmos.Setups.external_forcing(setup::CloudBenchSetup, ::Type{FT}) where {FT} = setup.forcing
+ClimaAtmos.Setups.external_forcing(setup::ClimaAtmosSwirlLMCloudBenchSetup, ::Type{FT}) where {FT} = setup.forcing
 
 """
     CloudBenchInsolation
@@ -449,9 +451,9 @@ ClimaAtmos.Setups.external_forcing(setup::CloudBenchSetup, ::Type{FT}) where {FT
 Insolation from the case's own `cos_zenith` and `toa_flux`, which CloudBench set to the GCM's diurnally averaged TOA
 insolation and insolation-weighted zenith angle for that location and month, and held fixed.
 """
-struct CloudBenchInsolation <: ClimaAtmos.AbstractInsolation end
+struct ClimaAtmosSwirlLMCloudBenchInsolation <: ClimaAtmos.AbstractInsolation end
 
-function ClimaAtmos.set_insolation_variables!(Y, p, t, ::CloudBenchInsolation)
+function ClimaAtmos.set_insolation_variables!(Y, p, t, ::ClimaAtmosSwirlLMCloudBenchInsolation)
     (; rrtmgp_solver) = p.radiation
     ClimaAtmos.RRTMGP.cos_zenith(rrtmgp_solver) .=
         ClimaAtmos.CC.Fields.field2array(p.external_forcing.cos_zenith)
@@ -460,20 +462,20 @@ function ClimaAtmos.set_insolation_variables!(Y, p, t, ::CloudBenchInsolation)
     return nothing
 end
 
-ClimaAtmos.Setups.insolation_model(::CloudBenchSetup) = CloudBenchInsolation()
+ClimaAtmos.Setups.insolation_model(::ClimaAtmosSwirlLMCloudBenchSetup) = ClimaAtmosSwirlLMCloudBenchInsolation()
 
 """
-    cloudbench_callback_kwargs(; kwargs...)
+    ClimaAtmos_SwirlLMCloudBench_callback_kwargs(; kwargs...)
 
 `callback_kwargs` for `ClimaAtmos.AtmosSimulation`, refreshing RRTMGP on the cadence CloudBench used — 4 simulated
 minutes, against ClimaAtmos's 6-hour default. Extra `kwargs` are passed through.
 """
-cloudbench_callback_kwargs(; kwargs...) = (;
+SwirlLMCloudBench.ClimaAtmos_SwirlLMCloudBench_callback_kwargs(; kwargs...) = (;
     dt_rad = string(Int(S.CLOUDBENCH_RADIATION.update_interval), "secs"),
     kwargs...,
 )
 
-function ClimaAtmos.Setups.surface_condition(setup::CloudBenchSetup, params)
+function ClimaAtmos.Setups.surface_condition(setup::ClimaAtmosSwirlLMCloudBenchSetup, params)
     FT = eltype(params)
     return (;
         flux_scheme = ClimaAtmos.Setups.MoninObukhov(; z0 = FT(setup.z0)),

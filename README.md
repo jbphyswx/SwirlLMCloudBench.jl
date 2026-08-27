@@ -11,7 +11,7 @@ Use this package to build URLs, download `sounding.csv` / `parameters.json`, ope
 
 **Optional extensions** (loaded when the corresponding package is available):
 
-- **ClimaAtmos** — drive a single-column ClimaAtmos run with forcing from a CloudBench sounding: `cloudbench_forcing` / `cloudbench_setup`, plus `cloudbench_params` for the matching ClimaParams overrides, composing ClimaAtmos's own GCM-driven (Shen et al. 2022) forcing kernels — the same methodology CloudBench was run with.
+- **ClimaAtmos** — drive a single-column ClimaAtmos run with forcing from a CloudBench sounding: `ClimaAtmosSwirlLMCloudBenchForcing` / `ClimaAtmosSwirlLMCloudBenchSetup`, plus `ClimaAtmos_SwirlLMCloudBench_params` for the matching ClimaParams overrides, composing ClimaAtmos's own GCM-driven (Shen et al. 2022) forcing kernels — the same methodology CloudBench was run with.
 - **OhMyThreads** — `cloudbench_tmap` for threaded iteration over collections (e.g. many `CloudBenchSimulation` / `CloudBenchInstance` values).
 - **Distributed** — `cloudbench_pmap_download_raw!` to download many simulations in parallel (`pmap` over `download_cloudbench_raw!`).
 
@@ -33,7 +33,7 @@ Condensed-phase **`q_c`** in CloudBench is described in the upstream README (wit
 |------|------------------|
 | Core (`Catalog`, `Paths`, `Config`, `Artifacts`) | Case indices, months, experiment names, default roots, artifact resolution. |
 | **`Simulation`** | `CloudBenchInstance`, `CloudBenchSimulation` (metadata + output backend), URLs, `download_cloudbench_raw!`, Scratch/env-backed **`Config.raw_download_root()`**, **`open_zarr`** (HTTPS), **`open_zarr_local`** (path + instance, or a simulation with **`LocalCloudBenchMirrorOutput`**), sounding NetCDF helpers, **`split_q_c`**, **`CloudBenchSelection`**. Catalog keys and selection need no network. Mirroring the full Zarr store via `download_cloudbench_raw!(…; zarr=true)` is not supported yet — use **`open_zarr`** for remote lazy access. |
-| **ClimaAtmos extension** | `cloudbench_forcing` / `cloudbench_setup` (GCM-driven forcing + initial conditions), `write_cloudbench_forcing_netcdf!` / `read_cloudbench_forcing`, `cloudbench_toml_overrides` / `cloudbench_params`, `cloudbench_callback_kwargs`, `CloudBenchInsolation`, `climaatmos_pkg_version`. |
+| **ClimaAtmos extension** | `ClimaAtmosSwirlLMCloudBenchForcing` / `ClimaAtmosSwirlLMCloudBenchSetup` (GCM-driven forcing + initial conditions), `write_ClimaAtmosSwirlLMCloudBenchForcing_netcdf!` / `read_ClimaAtmosSwirlLMCloudBenchForcing`, `ClimaAtmos_SwirlLMCloudBench_toml_overrides` / `ClimaAtmos_SwirlLMCloudBench_params`, `ClimaAtmosSwirlLMCloudBench_callback_kwargs`, `CloudBenchInsolation`, `climaatmos_pkg_version`. |
 | **OhMyThreads extension** | `cloudbench_tmap`. |
 | **Distributed extension** | `cloudbench_pmap_download_raw!` (parallel raw downloads). |
 
@@ -169,7 +169,7 @@ using ClimaAtmos: ClimaAtmos
 using SwirlLMCloudBench: SwirlLMCloudBench, Simulation as S
 
 sim   = S.CloudBenchSimulation(10, 7, :amip)
-setup = SwirlLMCloudBench.cloudbench_setup(sim)   # initial conditions AND forcing from the sounding (downloads it once)
+setup = SwirlLMCloudBench.ClimaAtmosSwirlLMCloudBenchSetup(sim)   # initial conditions AND forcing from the sounding (downloads it once)
 
 # pass `setup` straight to ClimaAtmos (alongside your usual grid / params / dt / t_end / output):
 # asim = ClimaAtmos.AtmosSimulation{Float64}(; setup,
@@ -177,8 +177,8 @@ setup = SwirlLMCloudBench.cloudbench_setup(sim)   # initial conditions AND forci
 #            params = ClimaAtmos.ClimaAtmosParameters(Float64), ...)
 
 # or build just the forcing object to attach to your own model/setup:
-forcing = SwirlLMCloudBench.cloudbench_forcing(sim)                 # nudging ON (matches CloudBench)
-forcing = SwirlLMCloudBench.cloudbench_forcing(sim; nudge = false)  # advection + subsidence only
+forcing = SwirlLMCloudBench.ClimaAtmosSwirlLMCloudBenchForcing(sim)                 # nudging ON (matches CloudBench)
+forcing = SwirlLMCloudBench.ClimaAtmosSwirlLMCloudBenchForcing(sim; nudge = false)  # advection + subsidence only
 ```
 
 Nudging is **on by default** (mirrors how CloudBench was run). For *exact* comparability also set ClimaAtmos's relaxation
@@ -189,8 +189,8 @@ parameters (`gcmdriven_scalar_relaxation_timescale`, `gcmdriven_momentum_relaxat
 **Through a file:**
 
 ```julia
-SwirlLMCloudBench.write_cloudbench_forcing_netcdf!("forcing.nc", forcing)
-forcing = SwirlLMCloudBench.read_cloudbench_forcing("forcing.nc")
+SwirlLMCloudBench.write_ClimaAtmosSwirlLMCloudBenchForcing_netcdf!("forcing.nc", forcing)
+forcing = SwirlLMCloudBench.read_ClimaAtmosSwirlLMCloudBenchForcing("forcing.nc")
 ```
 
 For a portable NetCDF of the *raw* sounding with **CloudBench** names (`z`, `temperature`, `q_t`, …), use
