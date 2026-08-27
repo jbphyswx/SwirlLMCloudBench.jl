@@ -6,6 +6,8 @@
 
 - [Swirl-LM](https://github.com/google-research/swirl-lm)
 - [CloudBench](https://github.com/google-research/swirl-lm/blob/main/swirl_lm/example/geo_flows/cloud_feedback/README.md)
+- [High- resolution simulations reveal positive global
+warming feedback from Pacific low clouds (https://doi.org/10.1126/sciadv.aec8488)](https://doi.org/10.1126/sciadv.aec8488)
 
 Use this package to build URLs, download `sounding.csv` / `parameters.json`, open **`data.zarr`** lazily over HTTPS (or from a local tree), and iterate CloudBench cases.
 
