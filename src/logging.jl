@@ -36,7 +36,7 @@ end
 
 Emit `message` at the info level with `kwargs` as log properties when logging is on for this call:
 
-- `verbose === nothing` — use [`cloudbench_logging`](@ref) (global / `ENV` default).
+- `verbose === nothing` — use [`cloudbench_logging`](@ref SwirlLMCloudBench.cloudbench_logging) (global / `ENV` default).
 - `verbose === true` or `false` — override the global setting **for this message only**.
 
 Used internally and by extensions; extenders may call this for consistent behavior.

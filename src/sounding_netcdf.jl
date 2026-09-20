@@ -10,7 +10,7 @@ along dimension `z`.
 
 - `z`: number of sounding levels.
 
-`verbose` controls the completion message (`nothing` → [`cloudbench_logging`](@ref)).
+`verbose` controls the completion message (`nothing` → [`cloudbench_logging`](@ref SwirlLMCloudBench.cloudbench_logging)).
 """
 function write_sounding_netcdf!(
     out_path::AbstractString,
@@ -60,8 +60,8 @@ end
 Ensure `sounding.csv` is local, then call [`write_sounding_netcdf!`](@ref) unless `out_path` already exists.
 
 `sim` may be a [`CloudBenchInstance`](@ref) or [`CloudBenchSimulation`](@ref). `root` is forwarded to
-[`ensure_cloudbench_sounding_local!`](@ref) (`nothing` → [`raw_download_root`](@ref)). `verbose` applies to download and
-write messages for this call (`nothing` → [`cloudbench_logging`](@ref)).
+[`ensure_cloudbench_sounding_local!`](@ref) (`nothing` → [`raw_download_root`](@ref SwirlLMCloudBench.Config.raw_download_root)). `verbose` applies to download and
+write messages for this call (`nothing` → [`cloudbench_logging`](@ref SwirlLMCloudBench.cloudbench_logging)).
 """
 function ensure_sounding_netcdf!(
     out_path::AbstractString,

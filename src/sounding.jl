@@ -49,36 +49,6 @@ const CLOUDBENCH_SOUNDING_ATTRIBUTES = (;
     cld_frac = ("1", "Cloud fraction"),
 )
 
-"""Swirl-LM's physical constants, verbatim from `swirl_lm/physics/constants.py`."""
-const SWIRL_LM_CONSTANTS = (;
-    # Universal gas constant, in units of J/mol/K.
-    R_UNIVERSAL = 8.3145,
-
-    # The precomputed gas constant for dry air, in units of J/kg/K.
-    R_D = 286.69,
-
-    # The gravitational acceleration constant, in units of N/kg.
-    G = 9.81,
-
-    # The heat capacity ratio of dry air, dimensionless.
-    GAMMA = 1.4,
-
-    # The constant pressure heat capacity of dry air, in units of J/kg/K.
-    CP = 1.4 * 286.69 / (1.4 - 1.0),
-
-    # The constant volume heat capacity of dry air, in units of J/kg/K.
-    CV = (1.4 * 286.69 / (1.4 - 1.0)) - 286.69,
-
-    # The molecular mass of dry air (kg/mol).
-    DRY_AIR_MOL_MASS = 0.0289647,
-
-    # The molecular mass of water (kg/mol).
-    WATER_MOL_MASS = 0.0180153,
-
-    # Avogadro's number.
-    AVOGADRO = 6.022e23,
-)
-
 """
     CloudBenchSounding{FT<:AbstractFloat,V<:AbstractVector{FT}}
 
@@ -285,9 +255,9 @@ Same symbols as in [`CLOUDBENCH_SOUNDING_COLUMNS`](@ref): `temperature`, `q_t`, 
 
 ## Large-scale advection split (matches Swirl [`gcm_forcing.py`](https://github.com/google-research/swirl-lm/blob/main/swirl_lm/example/geo_flows/cloud_feedback/gcm_forcing.py))
 
-Swirl’s [`_gcm_vertical_advection`](https://github.com/google-research/swirl-lm/blob/51289d7caf048a14aae649252ed974416277baa2/swirl_lm/example/geo_flows/cloud_feedback/gcm_forcing.py#L74-L101)
+Swirl’s [`_gcm_vertical_advection`](https://github.com/google-research/swirl-lm/blob/be199240e752/swirl_lm/example/geo_flows/cloud_feedback/gcm_forcing.py#L74-L101)
 returns large-scale **vertical** advection (subsidence ``\\times`` upwind vertical derivative). It is **added** to the total large-scale advective
-source in [`_q_t_horizontal_advective_tendency`](https://github.com/google-research/swirl-lm/blob/51289d7caf048a14aae649252ed974416277baa2/swirl_lm/example/geo_flows/cloud_feedback/gcm_forcing.py#L103-L131)
+source in [`_q_t_horizontal_advective_tendency`](https://github.com/google-research/swirl-lm/blob/be199240e752/swirl_lm/example/geo_flows/cloud_feedback/gcm_forcing.py#L103-L131)
 to form the residual Swirl labels horizontal (`total_adv + vadv`).
 
 On the **one-dimensional** column we store three levels of detail:
@@ -336,14 +306,14 @@ function cloudbench_sounding_zt_matrices(sounding::CloudBenchSounding, nt::Int)
     # tendency. Note that the GCM advective tendency corresponds to the negative
     # of the GCM advection term, so to remove the vertical contribution the
     # vertical advection term needs to be added; not subtracted. 
-    # see  https://github.com/google-research/swirl-lm/blob/51289d7caf048a14aae649252ed974416277baa2/swirl_lm/example/geo_flows/cloud_feedback/gcm_forcing.py#L122-L126
+    # see  https://github.com/google-research/swirl-lm/blob/be199240e752/swirl_lm/example/geo_flows/cloud_feedback/gcm_forcing.py#L122-L126
     T_hadv_profile = tadv .+ vadv_T
     q_t_hadv_profile = qadv .+ vadv_q
     temperature_vertical_advection_zt = _profile_replicated(vadv_T, nz, nt)
     q_t_vertical_advection_zt = _profile_replicated(vadv_q, nz, nt)
     temperature_hadv_zt = _profile_replicated(T_hadv_profile, nz, nt)
     q_t_hadv_zt = _profile_replicated(q_t_hadv_profile, nz, nt)
-    vertical_pressure_velocity_profile = @. -sounding.rho * T(SWIRL_LM_CONSTANTS.G) * wvec
+    vertical_pressure_velocity_profile = @. -sounding.rho * T(_Pkg.SWIRL_LM_CONSTANTS.G) * wvec
     vertical_pressure_velocity_zt = _profile_replicated(vertical_pressure_velocity_profile, nz, nt)
     return (;
         temperature = temperature_zt,

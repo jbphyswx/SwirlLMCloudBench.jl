@@ -5,7 +5,7 @@ using ..Config: Config
     download_cloudbench_raw!(sim; root=nothing, sounding=true, parameters=true, zarr=false) -> String
 
 Download raw bucket files into `[root]/[SITE_ID]/[MONTH]/[EXPERIMENT]/`, mirroring the public layout.
-When `root === nothing`, uses [`raw_download_root`](@ref).
+When `root === nothing`, uses [`raw_download_root`](@ref SwirlLMCloudBench.Config.raw_download_root).
 
 `sim` may be a [`CloudBenchInstance`](@ref) or [`CloudBenchSimulation`](@ref) (the catalog key is used).
 
@@ -13,7 +13,7 @@ Skips a file if it already exists. Keep `zarr=false`; downloading the full `data
 
 Returns the simulation directory ([`local_simulation_dir`](@ref)(`root`, `sim`)).
 
-`verbose` controls download messages for this call only (`nothing` → [`cloudbench_logging`](@ref)).
+`verbose` controls download messages for this call only (`nothing` → [`cloudbench_logging`](@ref SwirlLMCloudBench.cloudbench_logging)).
 """
 function download_cloudbench_raw!(
     inst::CloudBenchInstance;
@@ -73,7 +73,7 @@ Build a [`CloudBenchSimulation`](@ref) with [`CloudBenchMetadata`](@ref) (parsed
 - **`local_mirror=true`** (default): also set [`LocalCloudBenchMirrorOutput`](@ref)(`root`) so [`open_zarr_local`](@ref) can use that tree.
 - **`local_mirror=false`**: set [`RemoteCloudBenchZarrOutput`](@ref) instead — metadata is still read from disk under `root`, but Zarr stays remote ([`open_zarr`](@ref)).
 
-When `download`, calls [`download_cloudbench_raw!`](@ref)(`inst`; `root`, `verbose`). `root === nothing` uses [`raw_download_root`](@ref).
+When `download`, calls [`download_cloudbench_raw!`](@ref)(`inst`; `root`, `verbose`). `root === nothing` uses [`raw_download_root`](@ref SwirlLMCloudBench.Config.raw_download_root).
 
 Keyword `sounding_eltype` (default `Float32`) is forwarded to [`CloudBenchSounding`](@ref) when parsing `sounding.csv`.
 

@@ -14,6 +14,7 @@ Use this package to build URLs, download `sounding.csv` / `parameters.json`, ope
 **Optional extensions** (loaded when the corresponding package is available):
 
 - **ClimaAtmos** — drive a single-column ClimaAtmos run with forcing from a CloudBench sounding: `ClimaAtmosSwirlLMCloudBenchForcing` / `ClimaAtmosSwirlLMCloudBenchSetup`, plus `ClimaAtmos_SwirlLMCloudBench_params` for the matching ClimaParams overrides, composing ClimaAtmos's own GCM-driven (Shen et al. 2022) forcing kernels — the same methodology CloudBench was run with.
+- **Thermodynamics** — use a `ThermodynamicsParameters` set as a thermodynamics backend
 - **OhMyThreads** — `cloudbench_tmap` for threaded iteration over collections (e.g. many `CloudBenchSimulation` / `CloudBenchInstance` values).
 - **Distributed** — `cloudbench_pmap_download_raw!` to download many simulations in parallel (`pmap` over `download_cloudbench_raw!`).
 
@@ -25,7 +26,7 @@ Use this package to build URLs, download `sounding.csv` / `parameters.json`, ope
 
 `SwirlLMCloudBench` offers **catalog** constants for the published CloudBench ensemble, **path and cache** helpers, and the **`Simulation`** submodule for public-bucket `sounding.csv` and `parameters.json`, lazy **`data.zarr`** via `SwirlLMCloudBench.Simulation.open_zarr`, optional sounding-based **grouped NetCDF** (same variable names as `sounding.csv`), **lazy selection** over `(site_id, month, experiment)`, and a **mutable download cache** under [Scratch.jl](https://github.com/JuliaPackaging/Scratch.jl) (`Config.raw_download_root()` / `SWIRL_LM_CLOUDBENCH_RAW_ROOT`) mirroring `[root]/[SITE_ID]/[MONTH]/[EXPERIMENT]/`.
 
-Condensed-phase **`q_c`** in CloudBench is described in the upstream README (with `q_r`, `q_s`, etc.); this package provides **`split_q_c`** (`SwirlLMCloudBench.Simulation.split_q_c`) using the Swirl-LM temperature ramp.
+It also carries the physics the LES ran with: **`SWIRL_LM_CONSTANTS`** and **`SWIRL_LM_WATER`** (the constants and the water-thermodynamics parameters), the `CLOUDBENCH_*` run configuration, **`DefaultThermodynamicsBackend`** implementing Swirl-LM's `water.py`, and **`split_q_c`** for the condensed-phase `q_c` the upstream README describes (with `q_r`, `q_s`, etc.).
 
 ---
 
@@ -34,8 +35,10 @@ Condensed-phase **`q_c`** in CloudBench is described in the upstream README (wit
 | Area | What works today |
 |------|------------------|
 | Core (`Catalog`, `Paths`, `Config`, `Artifacts`) | Case indices, months, experiment names, default roots, artifact resolution. |
-| **`Simulation`** | `CloudBenchInstance`, `CloudBenchSimulation` (metadata + output backend), URLs, `download_cloudbench_raw!`, Scratch/env-backed **`Config.raw_download_root()`**, **`open_zarr`** (HTTPS), **`open_zarr_local`** (path + instance, or a simulation with **`LocalCloudBenchMirrorOutput`**), sounding NetCDF helpers, **`split_q_c`**, **`CloudBenchSelection`**. Catalog keys and selection need no network. Mirroring the full Zarr store via `download_cloudbench_raw!(…; zarr=true)` is not supported yet — use **`open_zarr`** for remote lazy access. |
+| **`Simulation`** | `CloudBenchInstance`, `CloudBenchSimulation` (metadata + output backend), URLs, `download_cloudbench_raw!`, Scratch/env-backed **`Config.raw_download_root()`**, **`open_zarr`** (HTTPS), **`open_zarr_local`** (path + instance, or a simulation with **`LocalCloudBenchMirrorOutput`**), sounding NetCDF helpers, statistics netCDF, **`CloudBenchSelection`**. Catalog keys and selection need no network. Mirroring the full Zarr store via `download_cloudbench_raw!(…; zarr=true)` is not supported yet — use **`open_zarr`** for remote lazy access. |
+| **Thermodynamics** (package scope) | `SWIRL_LM_CONSTANTS`, `SWIRL_LM_WATER`, the `CLOUDBENCH_*` run configuration, `DefaultThermodynamicsBackend` (Swirl-LM's `water.py`), `split_q_c`. |
 | **ClimaAtmos extension** | `ClimaAtmosSwirlLMCloudBenchForcing` / `ClimaAtmosSwirlLMCloudBenchSetup` (GCM-driven forcing + initial conditions), `write_ClimaAtmosSwirlLMCloudBenchForcing_netcdf!` / `read_ClimaAtmosSwirlLMCloudBenchForcing`, `ClimaAtmos_SwirlLMCloudBench_toml_overrides` / `ClimaAtmos_SwirlLMCloudBench_params`, `ClimaAtmosSwirlLMCloudBench_callback_kwargs`, `CloudBenchInsolation`, `climaatmos_pkg_version`. |
+| **Thermodynamics extension** | `ThermodynamicsParameters` as a backend|
 | **OhMyThreads extension** | `cloudbench_tmap`. |
 | **Distributed extension** | `cloudbench_pmap_download_raw!` (parallel raw downloads). |
 
@@ -139,12 +142,46 @@ zg = S.open_zarr(sim)
 
 If you have a **local** directory `data.zarr` under the same bucket-shaped `root`, use `S.open_zarr_local(sim, root)` or `S.open_zarr_local(S.cloudbench_instance(sim), root)` (errors if the path is missing). If `sim.output isa S.LocalCloudBenchMirrorOutput`, you can call `S.open_zarr_local(sim)` with one argument.
 
-### Split condensed water `q_c` into liquid and ice
+### Thermodynamics
 
-CloudBench publishes a single `q_c`; this package splits it using the Swirl-LM temperature ramp (see `?S.split_q_c`).
+The parameters the LES ran with, and the thermodynamics itself
 
 ```julia
-q_liq, q_ice = S.split_q_c(q_c, T)   # same units as q_c; T in K
+using SwirlLMCloudBench: SwirlLMCloudBench
+
+SwirlLMCloudBench.SWIRL_LM_CONSTANTS   # swirl_lm/physics/constants.py, verbatim
+SwirlLMCloudBench.SWIRL_LM_WATER       # the 22-parameter `Water` message the water thermodynamics is configured by
+```
+
+`DefaultThermodynamicsBackend()` implements Swirl-LM's `water.py` on them:
+
+```julia
+b = CB.DefaultThermodynamicsBackend()
+SwirlLMCloudBench.saturation_vapor_pressure_liq(b, 288.0)          # Pa
+SwirlLMCloudBench.q_vap_saturation(b, 288.0, 1.2)                  # T [K], ρ [kg/m³] — density-based, as Swirl-LM's is
+SwirlLMCloudBench.liquid_fraction(b, 253.15)                       # the 233 K → 273.15 K ramp
+SwirlLMCloudBench.liquid_ice_pottemp(b, 288.0, 9.0e4, 0.012)       # T, p_ref, q_tot
+SwirlLMCloudBench.saturation_adjust_pθq(b, 9.0e4, 290.0, 0.012)    # -> (; T, ρ, q_liq, q_ice)
+```
+
+With `Thermodynamics` loaded, a `ThermodynamicsParameters` set works as a backend for the same
+functions:
+
+```julia
+using SwirlLMCloudBench: SwirlLMCloudBench
+using Thermodynamics: Thermodynamics
+using ClimaParams: ClimaParams
+tp = Thermodynamics.Parameters.ThermodynamicsParameters(Float64)
+SwirlLMCloudBench.liquid_ice_pottemp(tp, 288.0, 9.0e4, 0.012)
+```
+
+### Split condensed water `q_c` into liquid and ice
+
+CloudBench publishes a single `q_c`; this package splits it with the backend's liquid-fraction
+ramp (see `?SwirlLMCloudBench.split_q_c`).
+
+```julia
+q_liq, q_ice = CB.split_q_c(q_c, T)   # same units as q_c; T in K
 ```
 
 ### Loop over many simulations (no network until you touch each case)
@@ -241,8 +278,9 @@ Environment overrides:
 Routine downloads use **Scratch** (mutable, depot-local, grown incrementally). The full ~2 TB `data.zarr` is **streamed**
 over HTTPS, never mirrored — [Pkg artifacts](https://pkgdocs.julialang.org/v1/artifacts/) are immutable, content-addressed
 blobs fetched whole, a poor fit for a multi-terabyte store accessed in arbitrary subsets, which is why the cache is
-rolled-own. The small sounding-CSV set (~50 MB raw / ~20 MB gzipped for all 10,000 cases) *is* a good artifact candidate;
-a bundled soundings artifact for fast offline catalog queries is planned (see `gen/build_sounding_artifact.jl`).
+rolled-own. The small sounding-CSV set (~50 MB raw / ~20 MB gzipped for all 10,000 cases) *is* a good fit, and ships as a
+lazy artifact for offline catalog queries: `Simulation.bundled_soundings_dir` / `bundled_sounding`, rebuilt with
+`gen/build_sounding_artifact.jl`.
 
 **Precedence:** an explicit `root=` on download/load functions overrides `SWIRL_LM_CLOUDBENCH_RAW_ROOT`, which overrides the Scratch default.
 

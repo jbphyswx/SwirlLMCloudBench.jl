@@ -41,7 +41,7 @@ arrays remain lazy until indexed.
 
 `experiment` may be a catalog `Symbol`, a segment string such as `\"amip-p4k\"`, or [`Catalog.CloudBenchExperiment`](@ref).
 
-`verbose` controls the open message for this call only (`nothing` → [`cloudbench_logging`](@ref)).
+`verbose` controls the open message for this call only (`nothing` → [`cloudbench_logging`](@ref SwirlLMCloudBench.cloudbench_logging)).
 """
 function open_zarr(
     site_id::Int,
@@ -72,7 +72,7 @@ When `simulation` is a [`CloudBenchSimulation`](@ref) with [`LocalCloudBenchMirr
 
 Downloading the full remote Zarr store into that path is not supported; use [`open_zarr`](@ref) for HTTPS access.
 
-`verbose` controls the open message for this call only (`nothing` → [`cloudbench_logging`](@ref)).
+`verbose` controls the open message for this call only (`nothing` → [`cloudbench_logging`](@ref SwirlLMCloudBench.cloudbench_logging)).
 """
 function open_zarr_local(
     inst::CloudBenchInstance,

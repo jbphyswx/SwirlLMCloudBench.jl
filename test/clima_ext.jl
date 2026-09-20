@@ -8,6 +8,24 @@ using Test: Test
 using ClimaAtmos: ClimaAtmos
 using SwirlLMCloudBench: Simulation as S, SwirlLMCloudBench
 
+Test.@testset "ClimaParams overrides carry Swirl-LM's thermodynamics" begin
+    W = SwirlLMCloudBench.SWIRL_LM_WATER
+    C = SwirlLMCloudBench.SWIRL_LM_CONSTANTS
+    overrides = SwirlLMCloudBench.ClimaAtmos_SwirlLMCloudBench_toml_overrides(:amip)
+    toml_dict = ClimaAtmos.CP.create_toml_dict(Float64; override_file = overrides)
+    tp = ClimaAtmos.ClimaAtmosParameters(toml_dict).thermodynamics_params
+
+    for (fname, want) in (
+        (:R_d, C.R_D), (:R_v, W.r_v), (:grav, C.G), (:cp_d, W.cp_d), (:cp_v, W.cp_v),
+        (:cp_l, W.cp_l), (:cp_i, W.cp_i), (:LH_v0, W.lh_v0), (:LH_s0, W.lh_s0),
+        (:T_0, W.t_0), (:T_triple, W.t_triple), (:T_freeze, W.t_freeze),
+        (:T_icenuc, W.t_icenuc), (:T_min, W.t_min), (:press_triple, W.p_triple),
+        (:p_ref_theta, W.p00),
+    )
+        Test.@test getfield(tp, fname) == want
+    end
+end
+
 function write_test_sounding(dir)
     csv = joinpath(dir, "s.csv")
     open(csv, "w") do io
@@ -99,7 +117,7 @@ Test.@testset "SwirlLMCloudBenchClimaAtmosExt (registered ClimaAtmos $(SwirlLMCl
                    ext.ClimaAtmosSwirlLMCloudBenchInsolation
 
         Y = ClimaAtmos.Setups.initial_state(
-            setup, params, ClimaAtmos.AtmosModel(), cspace, sp.face_space,
+            setup, params, ClimaAtmos.AtmosModel(grid; params), cspace, sp.face_space,
         )
         Test.@test all(isfinite, parent(Y.c))
         Test.@test all(isfinite, parent(Y.f))

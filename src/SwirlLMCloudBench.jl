@@ -18,7 +18,14 @@ See `README.md`.
 - `CaseDirs` — `resolved_case_dir` (canonical bucket layout `[root]/[site_id]/[month]/[experiment]/`) combining the above.
 - `Simulation` — `CloudBenchInstance`, `CloudBenchSimulation`, URLs, lazy [`Simulation.open_zarr`](@ref), `CloudBenchSounding`,
   [`Simulation.write_sounding_netcdf!`](@ref) / [`Simulation.ensure_sounding_netcdf!`](@ref),
-  [`Simulation.split_q_c`](@ref) (Swirl-LM liquid fraction on `q_c`), lazy [`Simulation.CloudBenchSelection`](@ref).
+  lazy [`Simulation.CloudBenchSelection`](@ref).
+
+# Physics at package scope
+
+[`SWIRL_LM_CONSTANTS`](@ref) and [`SWIRL_LM_WATER`](@ref) are the constants and water-thermodynamics parameters
+the CloudBench LES ran with; [`CLOUDBENCH_LES_GRID`](@ref) and the other `CLOUDBENCH_*` entries are its run
+configuration. [`DefaultThermodynamicsBackend`](@ref) implements Swirl-LM's water thermodynamics on them, and
+[`split_q_c`](@ref) partitions `data.zarr`'s `q_c` with it.
 
 CloudBench labels simulations with integer **`site_id`** in `0:499`, months `{1,4,7,10}`, and experiment segments per
 the upstream README.
@@ -51,6 +58,10 @@ include("paths.jl")
 include("catalog.jl")
 include("config.jl")
 include("case_dirs.jl")
+include("swirl_lm_parameters.jl")
+include("thermodynamics.jl")
+include("condensate.jl")
+include("les_config.jl")
 include("simulation_output.jl")
 
 export Catalog, Paths, Config, CaseDirs, Simulation
@@ -69,7 +80,10 @@ experiments_val() = Val.(Catalog.EXPERIMENTS)
 
 # :: Extensions ::
 # OhMyThreads / Distributed extensions:
+"""Threaded `map` over a collection; a method is added when `OhMyThreads` is loaded."""
 function cloudbench_tmap end
+
+"""Download many simulations in parallel; a method is added when `Distributed` is loaded."""
 function cloudbench_pmap_download_raw! end
 
 include("ext/ClimaAtmosExt_bindings.jl")

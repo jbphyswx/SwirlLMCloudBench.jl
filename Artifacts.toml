@@ -9,3 +9,16 @@ lazy = true
     [[cloudbench_soundings.download]]
     url = "https://github.com/jbphyswx/SwirlLMCloudBench.jl/releases/download/soundings-v1/cloudbench_soundings.tar.gz"
     sha256 = "2db7ee83d06bbd65ce3c93086f5d7a05d7419349aed698f7bef5c8f7b699b99e"
+
+# Lazy Pkg artifact: the post-processed statistics netCDF covering all 10,000 simulations
+# (193 MB uncompressed, 136 MB gz). Downloaded once into the depot on first use (see
+# `Simulation.cloudbench_statistics_artifact_path`); `ensure_cloudbench_statistics_local!` and
+# `open_cloudbench_statistics_remote` are the non-artifact routes. Rebuild with
+# `gen/build_statistics_artifact.jl`.
+[cloudbench_statistics]
+git-tree-sha1 = "fb67ce7f3d4742e665ac5ea77636628b5e7b7055"
+lazy = true
+
+    [[cloudbench_statistics.download]]
+    url = "https://github.com/jbphyswx/SwirlLMCloudBench.jl/releases/download/statistics-v1/cloudbench_statistics.tar.gz"
+    sha256 = "3228cf71396aab4082004ffa03e7afa7b9b8e2d359e4752803a0a730619a678a"

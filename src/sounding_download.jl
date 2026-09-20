@@ -11,9 +11,9 @@ check would treat as cached.
 
 `sim` may be a [`CloudBenchInstance`](@ref) or [`CloudBenchSimulation`](@ref).
 
-Uses the bucket-shaped layout under [`raw_download_root`](@ref) when `root === nothing`, otherwise [`sounding_path`](@ref)(`sim`, `root`).
+Uses the bucket-shaped layout under [`raw_download_root`](@ref SwirlLMCloudBench.Config.raw_download_root) when `root === nothing`, otherwise [`sounding_path`](@ref)(`sim`, `root`).
 
-`verbose` controls download messages for this call only (`nothing` → [`cloudbench_logging`](@ref)).
+`verbose` controls download messages for this call only (`nothing` → [`cloudbench_logging`](@ref SwirlLMCloudBench.cloudbench_logging)).
 """
 function ensure_cloudbench_sounding_local!(
     inst::CloudBenchInstance;

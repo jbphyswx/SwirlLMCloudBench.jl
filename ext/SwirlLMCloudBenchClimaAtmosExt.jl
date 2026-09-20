@@ -45,38 +45,51 @@ ClimaParams overrides putting a column on CloudBench's configuration, in the par
 `experiment` selects that scenario's CO₂; the rest is common to the ensemble.
 
 Every value the reference fixes is stated, including those that presently equal a ClimaParams default, so a change to
-those defaults cannot move a column off the reference silently.
+those defaults cannot move a column off the reference silently. The thermodynamic entries are Swirl-LM's `Water`
+defaults ([`SwirlLMCloudBench.SWIRL_LM_WATER`](@ref));
 
 What CloudBench fixes and this cannot: its cloud optics — an effective radius diagnosed as a one-third power law in
 liquid water content, with asymmetry factor 0.8, where ClimaAtmos assumes a constant radius and has no asymmetry
-entry. `docs/cloudbench_contract.md` section 6 records it.
+entry, so nothing here overrides it.
 """
 function SwirlLMCloudBench.ClimaAtmos_SwirlLMCloudBench_toml_overrides(experiment = :amip)
-    c = S.SWIRL_LM_CONSTANTS
-    r = S.CLOUDBENCH_RELAXATION
+    c = SwirlLMCloudBench.SWIRL_LM_CONSTANTS
+    w = SwirlLMCloudBench.SWIRL_LM_WATER
+    r = SwirlLMCloudBench.CLOUDBENCH_RELAXATION
     return Dict{String, Dict{String,Union{Float64,String}}}(
         # what distinguishes the five scenarios, with SST
-        "CO2_fixed_value" => _toml_float(S.cloudbench_co2_vmr(experiment)),
+        "CO2_fixed_value" => _toml_float(SwirlLMCloudBench.cloudbench_co2_vmr(experiment)),
         # ClimaParams' defaults here are Shen et al. (2022)'s, not CloudBench's
         "gcmdriven_scalar_relaxation_timescale" => _toml_float(r.tau_tropo),
         "gcmdriven_momentum_relaxation_timescale" => _toml_float(r.tau_wind),
         "gcmdriven_relaxation_minimum_height" => _toml_float(r.z_i),
         "gcmdriven_relaxation_maximum_height" => _toml_float(r.z_r),
-        "gas_constant" => _toml_float(c.R_UNIVERSAL),
+        "universal_gas_constant" => _toml_float(c.R_UNIVERSAL),
         "gas_constant_dry_air" => _toml_float(c.R_D),
-        "isobaric_specific_heat_dry_air" => _toml_float(c.CP),
-        "isochoric_specific_heat_dry_air" => _toml_float(c.CV),
-        "adiabatic_exponent_dry_air" => _toml_float(c.R_D / c.CP),
+        # the water thermodynamics uses cv_d + R_D, which is not SWIRL_LM_CONSTANTS.CP
+        "isobaric_specific_heat_dry_air" => _toml_float(w.cp_d),
+        "adiabatic_exponent_dry_air" => _toml_float(c.R_D / w.cp_d),
         "molar_mass_dry_air" => _toml_float(c.DRY_AIR_MOL_MASS),
         "molar_mass_water" => _toml_float(c.WATER_MOL_MASS),
         "gravitational_acceleration" => _toml_float(c.G),
         "avogadro_constant" => _toml_float(c.AVOGADRO),
+        "gas_constant_vapor" => _toml_float(w.r_v),
+        "isobaric_specific_heat_vapor" => _toml_float(w.cp_v),
+        "isobaric_specific_heat_liquid" => _toml_float(w.cp_l),
+        "isobaric_specific_heat_ice" => _toml_float(w.cp_i),
+        "latent_heat_vaporization_at_reference" => _toml_float(w.lh_v0),
+        "latent_heat_sublimation_at_reference" => _toml_float(w.lh_s0),
+        "thermodynamics_temperature_reference" => _toml_float(w.t_0),
+        "temperature_triple_point" => _toml_float(w.t_triple),
+        "pressure_triple_point" => _toml_float(w.p_triple),
+        "potential_temperature_reference_pressure" => _toml_float(w.p00),
+        "temperature_saturation_adjustment_min" => _toml_float(w.t_min),
         # liquid fraction ramps linearly between these two temperatures
-        "temperature_water_freeze" => _toml_float(S.CONDENSATE_T_FREEZE),
-        "temperature_homogenous_nucleation" => _toml_float(S.CONDENSATE_T_ICENUC),
+        "temperature_water_freeze" => _toml_float(w.t_freeze),
+        "temperature_homogenous_nucleation" => _toml_float(w.t_icenuc),
         "pow_icenuc" => _toml_float(1),
         "prescribed_cloud_droplet_number_concentration" =>
-            _toml_float(S.CLOUDBENCH_MICROPHYSICS.n_droplets),
+            _toml_float(SwirlLMCloudBench.CLOUDBENCH_MICROPHYSICS.n_droplets),
     )
 end
 
@@ -288,8 +301,14 @@ function ClimaAtmos.external_forcing_cache(Y, forcing::ClimaAtmosSwirlLMCloudBen
 
     zc_gcm = ClimaAtmos.CC.Fields.coordinate_field(Y.c).z
     z_src = forcing.z
-    setprof!(field, prof) =
-        (parent(field) .= ClimaAtmos.interp_vertical_prof(zc_gcm, z_src, prof); nothing)
+    # linear in height with flat extrapolation, the convention `ClimaAtmos.Setups.ColumnProfiles` uses
+    interp(prof) = ClimaAtmos.Intp.extrapolate(
+        ClimaAtmos.Intp.interpolate(
+            (z_src,), prof, ClimaAtmos.Intp.Gridded(ClimaAtmos.Intp.Linear()),
+        ),
+        ClimaAtmos.Intp.Flat(),
+    )
+    setprof!(field, prof) = (parent(field) .= interp(prof).(parent(zc_gcm)); nothing)
 
     setprof!(ᶜdTdt_hadv, forcing.dTdt_hadv)
     setprof!(ᶜdqtdt_hadv, forcing.dqtdt_hadv)
@@ -471,7 +490,7 @@ ClimaAtmos.Setups.insolation_model(::ClimaAtmosSwirlLMCloudBenchSetup) = ClimaAt
 minutes, against ClimaAtmos's 6-hour default. Extra `kwargs` are passed through.
 """
 SwirlLMCloudBench.ClimaAtmos_SwirlLMCloudBench_callback_kwargs(; kwargs...) = (;
-    dt_rad = string(Int(S.CLOUDBENCH_RADIATION.update_interval), "secs"),
+    dt_rad = string(Int(SwirlLMCloudBench.CLOUDBENCH_RADIATION.update_interval), "secs"),
     kwargs...,
 )
 

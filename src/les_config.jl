@@ -47,8 +47,8 @@ relaxed; terminal velocity is a linear combination of gamma-type functions rathe
 """
 const CLOUDBENCH_MICROPHYSICS = (;
     n_droplets = 1.0e8,   # m^-3
-    t_ice_nucleation = CONDENSATE_T_ICENUC,
-    t_freeze = CONDENSATE_T_FREEZE,
+    t_ice_nucleation = SWIRL_LM_WATER.t_icenuc,
+    t_freeze = SWIRL_LM_WATER.t_freeze,
 )
 
 """
