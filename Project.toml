@@ -30,7 +30,7 @@ SwirlLMCloudBenchOhMyThreadsExt = ["OhMyThreads"]
 
 [compat]
 Artifacts = "1"
-CSV = "0.10"
+CSV = "1"
 ClimaAtmos = "0.42"
 Distributed = "1"
 Downloads = "1.6"
@@ -41,5 +41,5 @@ Logging = "1"
 NCDatasets = "0.14"
 OhMyThreads = "0.8"
 Scratch = "1"
-Zarr = "0.10"
+Zarr = "0.10, 0.11"
 julia = "1.11"
